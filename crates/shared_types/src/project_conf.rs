@@ -111,41 +111,40 @@ mod tests {
     };
 
     const SAMPLE_V: &str = r#"
-  {
-    "configurations":
-      {
-        "java": {
-          "file_extensions": [
-            "java"
-          ],
-          "build_config": {
-            "main": {
-              "headers": [],
-              "function_name": "java_library"
+    {
+        "configurations": {
+          "java": {
+            "file_extensions": [
+              "java"
+            ],
+            "build_config": {
+              "main": {
+                "headers": [],
+                "function_name": "java_library"
+              },
+              "extra_key_to_list": {
+                "plugins": [
+                  "//foo/bar/bazplugin"
+                ]
+              }
             },
-            "extra_key_to_list": {
-              "plugins": [
-                "//foo/bar/bazplugin"
-              ]
-            }
-          },
-          "main_roots": [
-            "src/main/python"
-          ],
-          "test_roots": [
-            "src/test/python"
-          ],
-          "path_directives": [
-            {
-              "prefix": "module-a/src/test/scala/com/foo",
-              "directives": [
-                "runtime_ref:com.example.Bar"
-              ]
-            }
-          ]
-        }
+            "main_roots": [
+              "src/main/python"
+            ],
+            "test_roots": [
+              "src/test/python"
+            ]
+          }
+        },
+        "path_directives": [
+          {
+            "prefix": "module-a/src/test/scala/com/foo",
+            "directives": [
+              "runtime_ref:com.example.Bar"
+            ]
+          }
+        ]
       }
-  }
 "#;
 
     #[test]
@@ -169,14 +168,14 @@ mod tests {
                             test: None
                         },
                         main_roots: vec!["src/main/python".to_string()],
-                        test_roots: vec!["src/test/python".to_string()],
-                        path_directives: vec![DirectiveConf::new(
-                            "module-a/src/test/scala/com/foo".to_string(),
-                            vec!["runtime_ref:com.example.Bar".to_string()]
-                        )]
+                        test_roots: vec!["src/test/python".to_string()]
                     }
                 )]),
-                includes: vec![]
+                includes: vec![],
+                path_directives: vec![DirectiveConf::new(
+                    "module-a/src/test/scala/com/foo".to_string(),
+                    vec!["runtime_ref:com.example.Bar".to_string()]
+                )]
             }
         );
     }
