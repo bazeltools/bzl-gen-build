@@ -289,7 +289,7 @@ async fn print_file(
             .extend(lst.iter().cloned())
     }
 
-    for directive in module_config
+    for directive in project_conf
         .path_directives
         .iter()
         .filter(|e| element.starts_with(&e.prefix))
@@ -343,7 +343,11 @@ async fn print_file(
         if let Some(p) = node.strip_prefix(&element) {
             include.push(format!("{}/*.{}", &p[1..], primary_extension));
         } else {
-            return Err(anyhow!("Child node {} doesn't seem to be a child of the parent {}", node, element));
+            return Err(anyhow!(
+                "Child node {} doesn't seem to be a child of the parent {}",
+                node,
+                element
+            ));
         }
     }
 

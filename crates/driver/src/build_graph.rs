@@ -50,10 +50,16 @@ pub struct DefsData {
     pub defs: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum NodeType {
+    Synthetic,
+    RealNode,
+}
+
 #[derive(Debug, Default)]
 struct GraphState {
     pub forward_map: HashMap<Arc<String>, usize>,
-    pub reverse_map: HashMap<usize, Arc<String>>,
+    pub reverse_map: HashMap<usize, (Arc<String>, NodeType)>,
     compile_edges: HashMap<usize, HashSet<usize>>,
     pub runtime_edges: HashMap<usize, HashSet<usize>>,
     pub consumed_nodes: HashMap<usize, HashSet<usize>>,
@@ -68,6 +74,13 @@ impl GraphState {
     #[cfg(test)]
     pub fn get_compile_edges<'a>(&'a self, node_id: usize) -> Option<&HashSet<usize>> {
         self.compile_edges.get(&node_id)
+    }
+
+    pub fn get_node_label<'a>(&'a self, node_id: &usize) -> Option<&'a Arc<String>> {
+        match self.reverse_map.get(node_id).as_ref() {
+            Some((k, _)) => Some(k),
+            None => None,
+        }
     }
 
     #[cfg(test)]
@@ -129,7 +142,7 @@ impl GraphState {
         Err(anyhow!("Unreachable!"))
     }
 
-    pub fn add_node(&mut self, node: String) -> usize {
+    pub fn add_node(&mut self, node: String, node_type: NodeType) -> usize {
         match self.forward_map.get(&node) {
             Some(idx) => *idx,
             None => {
@@ -137,7 +150,7 @@ impl GraphState {
                 self.node_counter += 1;
                 let v = Arc::new(node);
                 self.forward_map.insert(v.clone(), nxt_id);
-                self.reverse_map.insert(nxt_id, v);
+                self.reverse_map.insert(nxt_id, (v, node_type));
                 self.compile_edges.insert(nxt_id, HashSet::default());
                 nxt_id
             }
@@ -151,7 +164,7 @@ impl GraphState {
             .get(&node_id)
             .map(|f| {
                 f.iter()
-                    .map(|n| self.reverse_map.get(n).unwrap().clone())
+                    .map(|n| self.get_node_label(n).unwrap().clone())
                     .collect()
             })
             .unwrap_or_default();
@@ -161,12 +174,12 @@ impl GraphState {
             .get(&node_id)
             .map(|f| {
                 f.iter()
-                    .map(|n| self.reverse_map.get(n).unwrap().clone())
+                    .map(|n| self.get_node_label(n).unwrap().clone())
                     .collect()
             })
             .unwrap_or_default();
 
-        let self_name = self.reverse_map.get(&node_id).unwrap().clone();
+        let self_name = self.get_node_label(&node_id).unwrap().clone();
         println!(
             "
         Debugging node: {}
@@ -199,7 +212,7 @@ impl GraphState {
     {
         let str_vals: Vec<Arc<String>> = candidates
             .into_iter()
-            .map(|e| self.reverse_map.get(e).unwrap().clone())
+            .map(|e| self.get_node_label(e).unwrap().clone())
             .collect();
 
         let first_c = str_vals.first().unwrap().to_string();
@@ -210,7 +223,7 @@ impl GraphState {
                 None => false,
                 Some(rem) => rem.is_empty() || rem.starts_with('/'),
             }) {
-                return Ok(self.add_node(cur_tst.to_string()));
+                return Ok(self.add_node(cur_tst.to_string(), NodeType::Synthetic));
             } else {
                 let nxt_dir = parent_dir(cur_tst);
                 if nxt_dir == cur_tst {
@@ -235,9 +248,9 @@ impl GraphState {
         for (k, values) in consumed_nodes.iter() {
             let lst: Vec<&Arc<String>> = values
                 .iter()
-                .flat_map(|e| self.reverse_map.get(e).into_iter())
+                .flat_map(|e| self.get_node_label(e).into_iter())
                 .collect();
-            let ky = &self.reverse_map.get(k).unwrap();
+            let ky = &self.get_node_label(k).unwrap();
 
             let mut entries: HashSet<String> = HashSet::default();
 
@@ -490,7 +503,7 @@ async fn load_initial_graph(
     }
 
     let mut forward_map: HashMap<Arc<String>, usize> = HashMap::default();
-    let mut reverse_map: HashMap<usize, Arc<String>> = HashMap::default();
+    let mut reverse_map: HashMap<usize, (Arc<String>, NodeType)> = HashMap::default();
 
     let mut owns_map: HashMap<u64, HashSet<usize>> = HashMap::default();
     struct TargetRefs {
@@ -568,7 +581,7 @@ async fn load_initial_graph(
         let m = Arc::new(k);
 
         forward_map.insert(m.clone(), idx);
-        reverse_map.insert(idx, m.clone());
+        reverse_map.insert(idx, (m.clone(), NodeType::RealNode));
 
         for e in defs.iter() {
             match owns_map.entry(*e) {
@@ -579,6 +592,7 @@ async fn load_initial_graph(
                             .get()
                             .iter()
                             .flat_map(|l| reverse_map.get(l).into_iter())
+                            .map(|e| &e.0)
                             .cloned()
                             .collect();
                         let d = all_defs.iter().find(|(_k, v)| *v == e).unwrap();
@@ -710,11 +724,7 @@ pub async fn build_graph(
 
     let mut configured_entity_directives: Vec<directive::EntityDirectiveConfig> = Vec::default();
 
-    for directives in project_conf
-        .configurations
-        .iter()
-        .flat_map(|(_k, v)| v.path_directives.iter())
-    {
+    for directives in project_conf.path_directives.iter() {
         match directives.directives().as_ref() {
             Ok(parsed_directives) => {
                 for d in parsed_directives {
@@ -768,24 +778,27 @@ pub async fn build_graph(
             }
         }
         let runtime_refs = graph.runtime_edges.get(node);
-        let k_name = graph.reverse_map.get(node).unwrap();
+        let k_name = graph.get_node_label(node).unwrap();
 
         let nodes = build_mapping
             .entry(k_name.as_ref().clone())
             .or_insert_with(|| GraphNode::default());
 
-        nodes.child_nodes.extend(child_nodes.into_iter().map(|c| {
-            graph
-                .reverse_map
-                .get(&c)
-                .expect("Graph invalid if missing")
-                .as_ref().clone()
-        }));
+        nodes
+            .child_nodes
+            .extend(child_nodes.into_iter().filter_map(|c| {
+                let (nme, tpe) = graph.reverse_map.get(&c).expect("Graph invalid if missing");
+
+                match tpe {
+                    NodeType::Synthetic => None,
+                    NodeType::RealNode => Some(nme.as_ref().clone()),
+                }
+            }));
         nodes.child_nodes.sort();
         nodes.child_nodes.dedup();
 
         for outbound_edge in outbound_compile_edges.iter() {
-            if let Some(t) = graph.reverse_map.get(outbound_edge) {
+            if let Some(t) = graph.get_node_label(outbound_edge) {
                 nodes.dependencies.push(t.as_ref().to_owned());
             } else {
                 panic!(
@@ -797,7 +810,7 @@ pub async fn build_graph(
         nodes.dependencies.sort();
 
         for outbound_runtime_edge in runtime_refs.as_ref().into_iter().flat_map(|e| e.iter()) {
-            if let Some(t) = graph.reverse_map.get(outbound_runtime_edge) {
+            if let Some(t) = graph.get_node_label(outbound_runtime_edge) {
                 nodes.runtime_dependencies.push(t.as_ref().to_owned());
             } else {
                 panic!(
@@ -823,9 +836,10 @@ mod tests {
     fn test_simple_graph() {
         let mut graph = GraphState::default();
 
-        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string());
-        let foo_bar_baz_boot = graph.add_node("com/foo/bar/baz/boot".to_string());
-        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string());
+        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string(), NodeType::RealNode);
+        let foo_bar_baz_boot =
+            graph.add_node("com/foo/bar/baz/boot".to_string(), NodeType::RealNode);
+        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string(), NodeType::RealNode);
         graph.add_compile_edge(foo_bar_baz, foo_bar_baz_boot);
         graph.add_compile_edge(foo_bar_baz_boot, foo_bar_baz);
         graph.add_compile_edge(foo_bar_baz_boot, foo_bar_ba3);
@@ -855,9 +869,10 @@ mod tests {
     fn test_simple_graph_runtime_edges() {
         let mut graph = GraphState::default();
 
-        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string());
-        let foo_bar_baz_boot = graph.add_node("com/foo/bar/baz/boot".to_string());
-        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string());
+        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string(), NodeType::RealNode);
+        let foo_bar_baz_boot =
+            graph.add_node("com/foo/bar/baz/boot".to_string(), NodeType::RealNode);
+        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string(), NodeType::RealNode);
         graph.add_compile_edge(foo_bar_baz, foo_bar_baz_boot);
         graph.add_runtime_edge(foo_bar_baz_boot, foo_bar_baz);
         graph.add_compile_edge(foo_bar_baz_boot, foo_bar_ba3);
@@ -887,9 +902,9 @@ mod tests {
     fn test_simple_graph_collapse() {
         let mut graph = GraphState::default();
 
-        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string());
-        let foo_bar_ba2 = graph.add_node("com/foo/bar/ba2".to_string());
-        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string());
+        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string(), NodeType::RealNode);
+        let foo_bar_ba2 = graph.add_node("com/foo/bar/ba2".to_string(), NodeType::RealNode);
+        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string(), NodeType::RealNode);
         graph.add_compile_edge(foo_bar_baz, foo_bar_ba2);
         graph.add_compile_edge(foo_bar_ba2, foo_bar_baz);
         graph.add_compile_edge(foo_bar_ba2, foo_bar_ba3);
@@ -927,9 +942,9 @@ mod tests {
     fn test_simple_graph_no_collapse() {
         let mut graph = GraphState::default();
 
-        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string());
-        let foo_bar_ba2 = graph.add_node("com/foo/bar/ba2".to_string());
-        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string());
+        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string(), NodeType::RealNode);
+        let foo_bar_ba2 = graph.add_node("com/foo/bar/ba2".to_string(), NodeType::RealNode);
+        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string(), NodeType::RealNode);
         graph.add_compile_edge(foo_bar_baz, foo_bar_ba2);
         graph.add_compile_edge(foo_bar_ba2, foo_bar_ba3);
 

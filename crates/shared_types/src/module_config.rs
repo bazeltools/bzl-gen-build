@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{build_config::BuildConfig, DirectiveConf};
+use crate::build_config::BuildConfig;
 
 #[derive(Debug, Serialize, Default, Deserialize, PartialEq, Eq)]
 pub struct ModuleConfig {
@@ -14,9 +14,6 @@ pub struct ModuleConfig {
 
     #[serde(default)]
     pub test_roots: Vec<String>,
-
-    #[serde(default)]
-    pub path_directives: Vec<DirectiveConf>,
 }
 
 impl ModuleConfig {
@@ -30,10 +27,5 @@ impl ModuleConfig {
         self.test_roots.extend(other.test_roots.into_iter());
         self.test_roots.sort();
         self.test_roots.dedup();
-
-        self.path_directives
-            .extend(other.path_directives.into_iter());
-        self.path_directives.sort();
-        self.path_directives.dedup();
     }
 }

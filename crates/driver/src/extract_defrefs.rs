@@ -122,7 +122,7 @@ async fn async_extract_def_refs(
     path: PathBuf,
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
-) -> Result<(Arc<ExtractConfig>, (PathBuf, Duration), Vec<ProcessedFile>)> {
+) -> Result<((PathBuf, Duration), Vec<ProcessedFile>)> {
     let mut results: Vec<
         tokio::task::JoinHandle<Result<(ProcessedFile, Duration), anyhow::Error>>,
     > = Vec::default();
@@ -155,14 +155,14 @@ async fn async_extract_def_refs(
         }
         res2.push(e);
     }
-    Ok((opt, (max_target, max_duration), res2))
+    Ok(((max_target, max_duration), res2))
 }
 
 async fn merge_defrefs(
     concurrent_io_operations: &Semaphore,
     path_sha_to_merged_defrefs: &'static Path,
     directory: String,
-    extract_config: Option<Arc<ExtractConfig>>,
+    project_conf: &'static ProjectConf,
     mut work_items: Vec<ProcessedFile>,
     sha_of_conf_config: Arc<String>,
 ) -> Result<(String, ExtractedMapping)> {
@@ -203,19 +203,16 @@ async fn merge_defrefs(
             }
         }
 
-        if let Some(extract_config) = extract_config {
-            let directive_strings: Vec<String> = extract_config
-                .module_config
-                .path_directives
-                .iter()
-                .filter(|directive| directory.starts_with(&directive.prefix))
-                .flat_map(|e| e.directive_strings.iter())
-                .cloned()
-                .collect();
+        let directive_strings: Vec<String> = project_conf
+            .path_directives
+            .iter()
+            .filter(|directive| directory.starts_with(&directive.prefix))
+            .flat_map(|e| e.directive_strings.iter())
+            .cloned()
+            .collect();
 
-            let directives = Directive::from_strings(&directive_strings)?;
-            existing.apply_directives(&directives);
-        }
+        let directives = Directive::from_strings(&directive_strings)?;
+        existing.apply_directives(&directives);
 
         let ed = EntityDirectives {
             entity_directives: existing.entity_directives.clone(),
@@ -279,7 +276,7 @@ fn extract_configs(
 async fn inner_load_external(
     _opt: &'static Opt,
     _extract: &'static Extract,
-    _project_conf: &'static ProjectConf,
+    project_conf: &'static ProjectConf,
     concurrent_io_operations: &'static Semaphore,
     path: PathBuf,
     path_sha_to_merged_defrefs: &'static Path,
@@ -307,7 +304,7 @@ async fn inner_load_external(
         concurrent_io_operations,
         path_sha_to_merged_defrefs,
         format!("sha256__{}", sha256),
-        None,
+        project_conf,
         work_items,
         sha_of_conf_config,
     )
@@ -362,10 +359,7 @@ async fn run_extractors_on_data<'a>(
     concurrent_io_operations: &'static Semaphore,
     sha_to_extract_root: &'a Path,
     extractors: &'a Extractors,
-) -> Result<(
-    Vec<(Arc<ExtractConfig>, Vec<ProcessedFile>)>,
-    (PathBuf, Duration),
-)> {
+) -> Result<(Vec<Vec<ProcessedFile>>, (PathBuf, Duration))> {
     let cfgs = extract_configs(opt, project_conf, sha_to_extract_root, extractors)?;
 
     let mut all_visiting_paths: Vec<(String, Arc<ExtractConfig>)> = Vec::default();
@@ -380,9 +374,7 @@ async fn run_extractors_on_data<'a>(
     }
 
     let mut async_join_handle: Vec<
-        tokio::task::JoinHandle<
-            Result<(Arc<ExtractConfig>, (PathBuf, Duration), Vec<ProcessedFile>)>,
-        >,
+        tokio::task::JoinHandle<Result<((PathBuf, Duration), Vec<ProcessedFile>)>>,
     > = Vec::default();
     for (path, extract_config) in all_visiting_paths.iter() {
         let p = opt.working_directory.join(path);
@@ -393,18 +385,17 @@ async fn run_extractors_on_data<'a>(
         }));
     }
 
-    let mut results: Vec<(Arc<ExtractConfig>, Vec<ProcessedFile>)> =
-        Vec::with_capacity(async_join_handle.len());
+    let mut results: Vec<Vec<ProcessedFile>> = Vec::with_capacity(async_join_handle.len());
     let mut max_duration = Duration::ZERO;
     let mut max_target: PathBuf = PathBuf::from("");
 
     while let Some(nxt) = async_join_handle.pop() {
-        let (cfg, (cur_t, dur), files) = nxt.await??;
+        let ((cur_t, dur), files) = nxt.await??;
         if dur > max_duration {
             max_duration = dur;
             max_target = cur_t;
         }
-        results.push((cfg, files));
+        results.push(files);
     }
     Ok((results, (max_target, max_duration)))
 }
@@ -506,7 +497,7 @@ pub async fn extract_defrefs(
     let st = Instant::now();
 
     let mut merge_work: Vec<_> = Vec::default();
-    for (extract_config, processed_files) in expanded {
+    for processed_files in expanded {
         let mut work: HashMap<String, Vec<ProcessedFile>> = HashMap::default();
 
         for processed_file in processed_files.into_iter() {
@@ -527,14 +518,13 @@ pub async fn extract_defrefs(
 
         for (directory, files) in work.into_iter() {
             let sha_of_conf_config = sha_of_conf_config.clone();
-            let extract_config = extract_config.clone();
             let path_sha_to_merged_defrefs = path_sha_to_merged_defrefs;
             merge_work.push(tokio::spawn(async move {
                 merge_defrefs(
                     concurrent_io_operations,
                     path_sha_to_merged_defrefs,
                     directory,
-                    Some(extract_config),
+                    project_conf,
                     files,
                     sha_of_conf_config,
                 )

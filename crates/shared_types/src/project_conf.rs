@@ -14,12 +14,20 @@ pub struct ProjectConf {
 
     #[serde(default)]
     pub includes: Vec<String>,
+
+    #[serde(default)]
+    pub path_directives: Vec<DirectiveConf>,
 }
 impl ProjectConf {
     pub fn merge(&mut self, other: ProjectConf) {
         self.includes.extend(other.includes.into_iter());
         self.includes.sort();
         self.includes.dedup();
+
+        self.path_directives
+            .extend(other.path_directives.into_iter());
+        self.path_directives.sort();
+        self.path_directives.dedup();
 
         for (k, v) in other.configurations {
             let e = self.configurations.entry(k);
@@ -31,19 +39,6 @@ impl ProjectConf {
             }
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Module {
-    pub path: String,
-    #[serde(default)]
-    pub java_plugins: Vec<String>,
-    #[serde(default)]
-    pub manual_deps: Vec<String>,
-    #[serde(default)]
-    pub manual_runtime_deps: Vec<String>,
-    #[serde(default)]
-    pub path_directives: Vec<DirectiveConf>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

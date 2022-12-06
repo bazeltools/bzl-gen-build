@@ -6,5 +6,5 @@ pub mod module_config;
 mod project_conf;
 
 pub use directive::{Directive, EntityDirective, SrcDirective};
-pub use project_conf::{DirectiveConf, Module, ProjectConf};
+pub use project_conf::{DirectiveConf, ProjectConf};
 pub mod serde_helpers;
