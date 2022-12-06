@@ -1,0 +1,20 @@
+[{
+    "name":"io.bazeltools.buildgen.javadefref.Main",
+    "queryAllPublicMethods":true,
+    "methods":[]
+  },
+  {
+    "name":"java.security.MessageDigestSpi"
+  },
+  {
+    "name":"java.security.SecureRandomParameters"
+  },
+  {
+    "name":"sun.security.provider.NativePRNG",
+    "methods":[{"name":"<init>","parameterTypes":[] }]
+  },
+  {
+    "name":"sun.security.provider.SHA",
+    "methods":[{"name":"<init>","parameterTypes":[] }]
+  }
+  ]

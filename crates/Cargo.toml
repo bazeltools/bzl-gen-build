@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "driver",
+    "python_extractor",
+    "python_utilities",
+    "shared_types"
+]

@@ -1,0 +1,32 @@
+[package]
+name = "bzl_gen_python_extractor"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+anyhow = "1.0.66"
+tokio = { version = "1.22.0", features = ["full"] }
+clap = { version = "4.0.26", features = ["derive"] }
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = "1.0.88"
+walkdir = "2.3.2"
+futures = "0.3.25"
+sha2 = { version = "0.10.6", features = ["asm"] }
+thiserror = "1.0.37"
+lazy_static = "1.4.0"
+ignore = "0.4.18"
+rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7"}
+rustpython-ast = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7", features = ["unparse"]}
+pretty_env_logger = "0.4.0"
+log = "0.4.17"
+
+[dev-dependencies]
+tempfile = "3.3.0"
+
+[dependencies.bzl_gen_build_shared_types]
+path = "../shared_types"
+
+
+[dependencies.bzl_gen_build_python_utilities]
+path = "../python_utilities"
