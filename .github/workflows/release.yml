@@ -68,12 +68,12 @@ jobs:
       - name: Download linux ubuntu 20 bzl-gen-build
         uses: actions/download-artifact@v1
         with:
-          name: bzl-gen-build-ubuntu-20.04
+          name: bzl-gen-build-linux-ubuntu-20.04
           path: downloads
       - name: Download linux bzl-gen-build 18
         uses: actions/download-artifact@v1
         with:
-          name: bzl-gen-build-ubuntu-18.04
+          name: bzl-gen-build-linux-ubuntu-18.04
           path: downloads
       - name: Download macos bzl-gen-build
         uses: actions/download-artifact@v1
