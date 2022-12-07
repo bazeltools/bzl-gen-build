@@ -193,7 +193,6 @@ impl Directive {
     fn parse_binary_ref_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> IResult<&'a str, Directive, E> {
-        let (input, _) = space0(input)?;
         let (input, src_d) = BinaryRefDirective::parse(input)?;
         let (input, _) = nom::error::context(
             "colon after the binary command",
@@ -340,6 +339,7 @@ impl Directive {
     pub fn parse<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> IResult<&'a str, Directive, E> {
+        let (input, _) = space0(input)?;
         alt((
             Directive::parse_src_directive,
             Directive::parse_entity_directive,
@@ -479,6 +479,8 @@ mod tests {
                 target_value: Some("com.foo.bar.Baz".to_string())
             })
         );
+
+
     }
     #[test]
     fn other_parsing() {

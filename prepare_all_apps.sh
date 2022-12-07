@@ -24,7 +24,7 @@ if [ ! -d "$PREPARE_ALL_OUTPUT_DIR" ]; then
 fi
 
 echo "Running scala and python generator building"
-#OUTPUT_DIR=$PREPARE_ALL_OUTPUT_DIR language_generators/scala-defref-extractor/build_native.sh
+OUTPUT_DIR=$PREPARE_ALL_OUTPUT_DIR language_generators/scala-defref-extractor/build_native.sh
 
 cd crates
 cargo build $CARGO_EXTRA_ARGS --release
