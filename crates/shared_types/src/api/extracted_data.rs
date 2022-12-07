@@ -10,6 +10,7 @@ pub struct ExtractedData {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataBlock {
+    pub entity_path: String,
     #[serde(serialize_with = "crate::serde_helpers::ordered_set")]
     pub defs: HashSet<String>,
     #[serde(serialize_with = "crate::serde_helpers::ordered_set")]

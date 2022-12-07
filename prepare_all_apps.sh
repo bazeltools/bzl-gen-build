@@ -15,7 +15,7 @@ SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd $SCRIPTS_DIR
 
 if [ -z "$PREPARE_ALL_OUTPUT_DIR" ]; then
-    rm -rf /tmp/bzl-gen-build
+ #   rm -rf /tmp/bzl-gen-build
     export PREPARE_ALL_OUTPUT_DIR="/tmp/bzl-gen-build"
 fi
 
@@ -24,7 +24,7 @@ if [ ! -d "$PREPARE_ALL_OUTPUT_DIR" ]; then
 fi
 
 echo "Running scala and python generator building"
-OUTPUT_DIR=$PREPARE_ALL_OUTPUT_DIR language_generators/scala-defref-extractor/build_native.sh
+#OUTPUT_DIR=$PREPARE_ALL_OUTPUT_DIR language_generators/scala-defref-extractor/build_native.sh
 
 cd crates
 cargo build $CARGO_EXTRA_ARGS --release

@@ -79,8 +79,8 @@ enum SrcType {
         include: Vec<String>,
         exclude: Vec<String>,
     },
-    #[allow(dead_code)]
-    Files(Vec<String>),
+
+    List(Vec<String>),
 }
 impl SrcType {
     pub fn to_statement(&self) -> Located<ast::ExprKind> {
@@ -117,7 +117,7 @@ impl SrcType {
                 )
             }
 
-            SrcType::Files(files) => ast_builder::as_py_list(
+            SrcType::List(files) => ast_builder::as_py_list(
                 files
                     .iter()
                     .map(|e| ast_builder::with_constant_str(e.clone()))
@@ -298,6 +298,7 @@ async fn print_file(
             Ok(loaded) => {
                 for d in loaded {
                     match d {
+                        Directive::BinaryRef(_) => todo!(),
                         // Other directive types are actioned much earlier in the pipeline.
                         Directive::SrcDirective(_) => (), // no op.
                         Directive::EntityDirective(_) => (), // no op
@@ -338,16 +339,57 @@ async fn print_file(
         ));
     };
 
-    let mut include: Vec<String> = vec![format!("*.{}", primary_extension)];
+    let mut t = TargetEntries {
+        entries: Vec::default(),
+    };
+    let filegroup_target_name = format!("{}_files", target_name);
+
+    let mut parent_include_src = Vec::default();
+
+    match graph_node.node_type {
+        crate::build_graph::NodeType::Synthetic => {}
+        crate::build_graph::NodeType::RealNode => {
+            parent_include_src.push(format!(":{}", filegroup_target_name));
+
+            let filegroup_target = TargetEntry {
+                name: filegroup_target_name.clone(),
+                extra_kv_pairs: Vec::default(),
+                required_load: HashMap::default(),
+                visibility: None,
+                srcs: SrcType::Glob {
+                    include: vec![format!("**/*.{}", primary_extension)],
+                    exclude: Vec::default(),
+                },
+                target_type: Arc::new("filegroup".to_string()),
+            };
+            t.entries.push(filegroup_target);
+        }
+    }
+
     for node in graph_node.child_nodes.iter() {
-        if let Some(p) = node.strip_prefix(&element) {
-            include.push(format!("{}/*.{}", &p[1..], primary_extension));
-        } else {
-            return Err(anyhow!(
-                "Child node {} doesn't seem to be a child of the parent {}",
-                node,
-                element
-            ));
+        if let Some(folder_name) = node.split('/').filter(|e| !e.is_empty()).last() {
+            parent_include_src.push(format!("//{}:{}_files", node, folder_name));
+
+            let filegroup_target = TargetEntry {
+                name: format!("{}_files", folder_name),
+                extra_kv_pairs: Vec::default(),
+                required_load: HashMap::default(),
+                visibility: None,
+                srcs: SrcType::Glob {
+                    include: vec![format!("**/*.{}", primary_extension)],
+                    exclude: Vec::default(),
+                },
+                target_type: Arc::new("filegroup".to_string()),
+            };
+            let t = TargetEntries {
+                entries: vec![filegroup_target],
+            };
+
+            let _handle = concurrent_io_operations.acquire().await?;
+            let sub_target = opt.working_directory.join(node).join("BUILD.bazel");
+            tokio::fs::write(&sub_target, t.emit_build_file()?)
+                .await
+                .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
         }
     }
 
@@ -363,16 +405,11 @@ async fn print_file(
             .collect(),
         required_load,
         visibility: None,
-        srcs: SrcType::Glob {
-            include,
-            exclude: Vec::default(),
-        },
+        srcs: SrcType::List(parent_include_src),
         target_type: Arc::new(build_config.function_name.clone()),
     };
 
-    let t = TargetEntries {
-        entries: vec![target],
-    };
+    t.entries.push(target);
 
     let handle = concurrent_io_operations.acquire().await?;
 

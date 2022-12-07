@@ -17,7 +17,11 @@ mod extract_py_imports;
 pub struct Opt {
     #[clap(long)]
     /// comma sepearted list of input files
-    inputs: String,
+    relative_input_paths: String,
+
+    #[clap(long)]
+    /// comma sepearted list of input files
+    working_directory: PathBuf,
 
     #[clap(long)]
     output: PathBuf,
@@ -48,20 +52,22 @@ async fn main() -> Result<()> {
 
     let start_time = Instant::now();
 
-    let mut input_files: Vec<PathBuf> = if let Some(suffix) = opt.inputs.strip_prefix('@') {
-        std::fs::read_to_string(PathBuf::from(suffix))?
-            .lines()
-            .map(PathBuf::from)
-            .collect()
-    } else {
-        vec![PathBuf::from(opt.inputs)]
-    };
+    let mut relative_input_paths: Vec<String> =
+        if let Some(suffix) = opt.relative_input_paths.strip_prefix('@') {
+            std::fs::read_to_string(PathBuf::from(suffix))?
+                .lines()
+                .map(|e| e.to_string())
+                .collect()
+        } else {
+            vec![opt.relative_input_paths.clone()]
+        };
 
-    input_files.sort();
+    relative_input_paths.sort();
 
     let mut data_blocks: Vec<DataBlock> = Default::default();
 
-    for input_file in input_files {
+    for relative_path in relative_input_paths {
+        let input_file = opt.working_directory.join(&relative_path);
         let mut refs: HashSet<String> = Default::default();
         let mut defs: HashSet<String> = Default::default();
         let mut bzl_gen_build_commands: HashSet<String> = Default::default();
@@ -98,6 +104,7 @@ async fn main() -> Result<()> {
             defs.extend(expand_path_to_defs(file_p.as_ref()));
         }
         data_blocks.push(DataBlock {
+            entity_path: relative_path,
             defs,
             refs,
             bzl_gen_build_commands,

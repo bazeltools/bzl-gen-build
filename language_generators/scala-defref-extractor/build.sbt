@@ -15,7 +15,7 @@ libraryDependencies += "com.github.javaparser" % "javaparser-core" % "3.24.8"
 scalacOptions += "-deprecation"
 scalacOptions += "-Wunused"
 
-mainClass in Compile := Some("io.bazeltools.buildgen.javadefref.Main")
+mainClass in Compile := Some("io.bazeltools.buildgen.scaladefref.Main")
 
 enablePlugins(NativeImagePlugin)
 nativeImageVersion := "22.3.0"

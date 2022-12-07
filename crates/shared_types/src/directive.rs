@@ -1,4 +1,5 @@
 use nom::sequence::tuple;
+use nom::Parser;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -70,6 +71,28 @@ impl std::fmt::Display for ManualRefDirective {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub enum BinaryRefDirective {
+    GenerateBinary,
+}
+impl BinaryRefDirective {
+    pub fn parse<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, BinaryRefDirective, E> {
+        alt((value(
+            BinaryRefDirective::GenerateBinary,
+            tag("binary_generate"),
+        ),))(input)
+    }
+}
+impl std::fmt::Display for BinaryRefDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryRefDirective::GenerateBinary => write!(f, "binary_generate"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EntityDirective {
     Link,
@@ -111,10 +134,17 @@ pub struct ManualRefConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct BinaryRefConfig {
+    pub command: BinaryRefDirective,
+    pub target_value: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum Directive {
     SrcDirective(SrcDirectiveConfig),
     EntityDirective(EntityDirectiveConfig),
     ManualRef(ManualRefConfig),
+    BinaryRef(BinaryRefConfig),
 }
 
 impl Directive {
@@ -149,6 +179,42 @@ impl Directive {
             }),
         )(input)?;
         Ok((input, d.to_string()))
+    }
+
+    fn parse_binary_ref_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, Directive, E> {
+        let (input, src_d) = BinaryRefDirective::parse(input)?;
+
+        fn maybe_parse_target<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+            input: &'a str,
+        ) -> IResult<&'a str, Option<String>, E> {
+            let (input, _) = nom::error::context(
+                "colon after entity",
+                tuple((space0, nom::bytes::complete::tag(":"), space0)),
+            )(input)?;
+
+            let (input, (_, r, _)) = tuple((
+                space0,
+                nom::bytes::complete::take_while1(|e: char| !e.is_whitespace()),
+                space0,
+            ))(input)?;
+            let (input, _) = nom::combinator::eof(input)?;
+            Ok((input, Some(r.to_string())))
+        }
+
+        let (input, maybe_target) = alt((
+            maybe_parse_target,
+            tuple((space0, nom::combinator::eof)).map(|_| None),
+        ))(input)?;
+
+        Ok((
+            input,
+            Directive::BinaryRef(BinaryRefConfig {
+                command: src_d,
+                target_value: maybe_target,
+            }),
+        ))
     }
 
     fn parse_manual_ref_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -249,6 +315,7 @@ impl Directive {
             Directive::parse_src_directive,
             Directive::parse_entity_directive,
             Directive::parse_manual_ref_directive,
+            Directive::parse_binary_ref_directive,
         ))(input)
     }
 }
@@ -262,6 +329,15 @@ impl std::fmt::Display for Directive {
             }) => {
                 write!(f, "{}:", command)?;
                 write!(f, "{}", target_value)?;
+            }
+            Directive::BinaryRef(BinaryRefConfig {
+                command,
+                target_value,
+            }) => {
+                write!(f, "{}", command)?;
+                if let Some(v) = target_value {
+                    write!(f, "{}", v)?;
+                }
             }
             Directive::SrcDirective(SrcDirectiveConfig { command, act_on }) => {
                 write!(f, "{}:", command)?;
@@ -344,6 +420,22 @@ mod tests {
             Directive::ManualRef(ManualRefConfig {
                 command: ManualRefDirective::RuntimeRef,
                 target_value: "//:build_gradle_properties_jar".to_string()
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("binary_generate"),
+            Directive::BinaryRef(BinaryRefConfig {
+                command: BinaryRefDirective::GenerateBinary,
+                target_value: None
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("binary_generate: com.foo.bar.baz"),
+            Directive::BinaryRef(BinaryRefConfig {
+                command: BinaryRefDirective::GenerateBinary,
+                target_value: Some("com.foo.bar.baz".to_string())
             })
         );
     }

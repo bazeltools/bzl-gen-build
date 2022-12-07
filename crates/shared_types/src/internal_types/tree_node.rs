@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    directive::{EntityDirectiveConfig, ManualRefConfig, SrcDirectiveConfig},
+    directive::{BinaryRefConfig, EntityDirectiveConfig, ManualRefConfig, SrcDirectiveConfig},
     Directive,
 };
 
@@ -25,6 +25,9 @@ pub struct TreeNode {
 
     #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
     pub manual_ref_directives: Vec<ManualRefConfig>,
+
+    #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
+    pub binary_ref_directives: Vec<(Option<String>, BinaryRefConfig)>,
 }
 
 impl TryFrom<crate::api::extracted_data::DataBlock> for TreeNode {
@@ -53,7 +56,7 @@ impl TreeNode {
         }
     }
 
-    pub fn apply_directives<'a, T>(&mut self, directives: T)
+    fn apply_directives_with_path<'a, T>(&mut self, directives: T, entity_path: Option<&String>)
     where
         T: IntoIterator<Item = &'a Directive> + Copy + std::fmt::Debug,
     {
@@ -71,13 +74,26 @@ impl TreeNode {
                 }
                 Directive::EntityDirective(ed) => self.entity_directives.push(ed.clone()),
                 Directive::ManualRef(mr) => self.manual_ref_directives.push(mr.clone()),
+                Directive::BinaryRef(mr) => self
+                    .binary_ref_directives
+                    .push((entity_path.map(|e| e.to_string()), mr.clone())),
             }
         }
         self.entity_directives.sort();
         self.entity_directives.dedup();
 
+        self.binary_ref_directives.sort();
+        self.binary_ref_directives.dedup();
+
         self.manual_ref_directives.sort();
         self.manual_ref_directives.dedup();
+    }
+
+    pub fn apply_directives<'a, T>(&mut self, directives: T)
+    where
+        T: IntoIterator<Item = &'a Directive> + Copy + std::fmt::Debug,
+    {
+        self.apply_directives_with_path(directives, None);
     }
 
     pub fn merge(&mut self, mut other: TreeNode) {
@@ -94,6 +110,11 @@ impl TreeNode {
             .extend(std::mem::take(&mut other.entity_directives).into_iter());
         self.entity_directives.sort();
         self.entity_directives.dedup();
+
+        self.binary_ref_directives
+            .extend(std::mem::take(&mut other.binary_ref_directives).into_iter());
+        self.binary_ref_directives.sort();
+        self.binary_ref_directives.dedup();
 
         self.manual_ref_directives
             .extend(std::mem::take(&mut other.manual_ref_directives).into_iter());

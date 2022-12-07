@@ -26,6 +26,7 @@ pub struct GraphNode {
     pub child_nodes: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runtime_dependencies: Vec<String>,
+    pub node_type: NodeType,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -50,10 +51,15 @@ pub struct DefsData {
     pub defs: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum NodeType {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Copy)]
+pub enum NodeType {
     Synthetic,
     RealNode,
+}
+impl Default for NodeType {
+    fn default() -> Self {
+        Self::Synthetic
+    }
 }
 
 #[derive(Debug, Default)]
@@ -79,6 +85,13 @@ impl GraphState {
     pub fn get_node_label<'a>(&'a self, node_id: &usize) -> Option<&'a Arc<String>> {
         match self.reverse_map.get(node_id).as_ref() {
             Some((k, _)) => Some(k),
+            None => None,
+        }
+    }
+
+    pub fn get_node_type<'a>(&'a self, node_id: &usize) -> Option<NodeType> {
+        match self.reverse_map.get(node_id).as_ref() {
+            Some((_, t)) => Some(*t),
             None => None,
         }
     }
@@ -729,6 +742,7 @@ pub async fn build_graph(
             Ok(parsed_directives) => {
                 for d in parsed_directives {
                     match d {
+                        Directive::BinaryRef(_) => (),    // handled elsewhere
                         Directive::SrcDirective(_) => (), // handled elsewhere
                         Directive::ManualRef(_) => (),    // handled elsewhere
                         Directive::EntityDirective(ed) => {
@@ -819,6 +833,7 @@ pub async fn build_graph(
                 );
             }
         }
+        nodes.node_type = graph.get_node_type(node).unwrap();
         nodes.runtime_dependencies.sort();
     }
 
