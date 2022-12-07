@@ -468,7 +468,7 @@ object ScalaSourceEntityExtractor {
       val defs = s.definedEntities
       val refs = s.nonLocalRefs(getResolve(s))
 
-      Writer.tell(DataBlock(defs = defs, refs = refs))
+      Writer.tell(DataBlock("", defs = defs, refs = refs))
     }
 
     pt.traverse(processScope).run._1

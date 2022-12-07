@@ -9,7 +9,9 @@ use crate::{async_read_json_file, read_json_file, write_json_file, BuildGraphArg
 
 use anyhow::{anyhow, Result};
 use bzl_gen_build_shared_types::{
-    directive::EntityDirectiveConfig, internal_types::tree_node::TreeNode, *,
+    directive::{BinaryRefAndPath, BinaryRefConfig, EntityDirectiveConfig, ManualRefConfig},
+    internal_types::tree_node::TreeNode,
+    *,
 };
 
 use log::{debug, info};
@@ -22,11 +24,43 @@ use super::extract_defrefs::ExtractedMappings;
 pub struct GraphNode {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub child_nodes: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "bzl_gen_build_shared_types::serde_helpers::ordered_map"
+    )]
+    pub child_nodes: HashMap<String, GraphNodeMetadata>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runtime_dependencies: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub manual_ref_configs: Vec<ManualRefConfig>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binary_ref_configs: Vec<BinaryRefConfig>,
+    #[serde(default, skip_serializing_if = "GraphNodeMetadata::is_empty")]
+    pub node_metadata: GraphNodeMetadata,
     pub node_type: NodeType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, Eq)]
+pub struct GraphNodeMetadata {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binary_refs: Vec<BinaryRefAndPath>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub manual_refs: Vec<ManualRefConfig>,
+}
+impl GraphNodeMetadata {
+    pub fn is_empty(&self) -> bool {
+        self.binary_refs.is_empty() && self.manual_refs.is_empty()
+    }
+}
+
+impl<'a> From<&'a NodeExternalState> for GraphNodeMetadata {
+    fn from(nes: &'a NodeExternalState) -> Self {
+        Self {
+            binary_refs: nes.binary_refs.clone(),
+            manual_refs: nes.manual_refs.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -62,10 +96,28 @@ impl Default for NodeType {
     }
 }
 
+#[derive(Debug)]
+struct NodeExternalState {
+    pub name: Arc<String>,
+    pub node_type: NodeType,
+    pub binary_refs: Vec<BinaryRefAndPath>,
+    pub manual_refs: Vec<ManualRefConfig>,
+}
+impl NodeExternalState {
+    pub fn empty(name: Arc<String>, node_type: NodeType) -> Self {
+        Self {
+            name,
+            node_type,
+            binary_refs: Default::default(),
+            manual_refs: Default::default(),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct GraphState {
     pub forward_map: HashMap<Arc<String>, usize>,
-    pub reverse_map: HashMap<usize, (Arc<String>, NodeType)>,
+    pub reverse_map: HashMap<usize, Arc<NodeExternalState>>,
     compile_edges: HashMap<usize, HashSet<usize>>,
     pub runtime_edges: HashMap<usize, HashSet<usize>>,
     pub consumed_nodes: HashMap<usize, HashSet<usize>>,
@@ -82,18 +134,12 @@ impl GraphState {
         self.compile_edges.get(&node_id)
     }
 
-    pub fn get_node_label<'a>(&'a self, node_id: &usize) -> Option<&'a Arc<String>> {
-        match self.reverse_map.get(node_id).as_ref() {
-            Some((k, _)) => Some(k),
-            None => None,
-        }
+    pub fn get_metadata<'a>(&'a self, node_id: &usize) -> Option<&'a NodeExternalState> {
+        self.reverse_map.get(node_id).map(|e| e.as_ref())
     }
 
-    pub fn get_node_type<'a>(&'a self, node_id: &usize) -> Option<NodeType> {
-        match self.reverse_map.get(node_id).as_ref() {
-            Some((_, t)) => Some(*t),
-            None => None,
-        }
+    pub fn get_node_label<'a>(&'a self, node_id: &usize) -> Option<&'a str> {
+        self.get_metadata(node_id).map(|e| e.name.as_str())
     }
 
     #[cfg(test)]
@@ -163,7 +209,8 @@ impl GraphState {
                 self.node_counter += 1;
                 let v = Arc::new(node);
                 self.forward_map.insert(v.clone(), nxt_id);
-                self.reverse_map.insert(nxt_id, (v, node_type));
+                self.reverse_map
+                    .insert(nxt_id, Arc::new(NodeExternalState::empty(v, node_type)));
                 self.compile_edges.insert(nxt_id, HashSet::default());
                 nxt_id
             }
@@ -172,27 +219,19 @@ impl GraphState {
 
     #[allow(dead_code)]
     pub fn debug_node(&self, node_id: usize) {
-        let outbound_compile_edges: Vec<Arc<String>> = self
+        let outbound_compile_edges: Vec<&str> = self
             .compile_edges
             .get(&node_id)
-            .map(|f| {
-                f.iter()
-                    .map(|n| self.get_node_label(n).unwrap().clone())
-                    .collect()
-            })
+            .map(|f| f.iter().map(|n| self.get_node_label(n).unwrap()).collect())
             .unwrap_or_default();
 
-        let outbound_runtime_edges: Vec<Arc<String>> = self
+        let outbound_runtime_edges: Vec<&str> = self
             .runtime_edges
             .get(&node_id)
-            .map(|f| {
-                f.iter()
-                    .map(|n| self.get_node_label(n).unwrap().clone())
-                    .collect()
-            })
+            .map(|f| f.iter().map(|n| self.get_node_label(n).unwrap()).collect())
             .unwrap_or_default();
 
-        let self_name = self.get_node_label(&node_id).unwrap().clone();
+        let self_name = self.get_node_label(&node_id).unwrap();
         println!(
             "
         Debugging node: {}
@@ -223,9 +262,9 @@ impl GraphState {
     where
         T: IntoIterator<Item = &'a usize> + Copy + std::fmt::Debug,
     {
-        let str_vals: Vec<Arc<String>> = candidates
+        let str_vals: Vec<&str> = candidates
             .into_iter()
-            .map(|e| self.get_node_label(e).unwrap().clone())
+            .map(|e| self.get_node_label(e).unwrap())
             .collect();
 
         let first_c = str_vals.first().unwrap().to_string();
@@ -259,7 +298,7 @@ impl GraphState {
     pub fn common_ancestor(&mut self) -> Result<()> {
         let consumed_nodes = self.consumed_nodes.clone();
         for (k, values) in consumed_nodes.iter() {
-            let lst: Vec<&Arc<String>> = values
+            let lst: Vec<&str> = values
                 .iter()
                 .flat_map(|e| self.get_node_label(e).into_iter())
                 .collect();
@@ -268,7 +307,7 @@ impl GraphState {
             let mut entries: HashSet<String> = HashSet::default();
 
             for ele in lst.iter() {
-                match ele.strip_prefix(ky.as_str()) {
+                match ele.strip_prefix(ky) {
                     None => return Err(anyhow!("Element in equiv set doesn't share the same prefix: target: {} , parent: {}", ele, ky)),
                     Some(remainder) => {
                         let mut previous: Option<String> = None;
@@ -509,14 +548,21 @@ async fn load_initial_graph(
 
                 (
                     e.label_or_repo_path,
-                    (refs, defs, runtime_refs, e.entity_directives),
+                    (
+                        refs,
+                        defs,
+                        runtime_refs,
+                        e.entity_directives,
+                        e.binary_ref_directives,
+                        e.manual_ref_directives,
+                    ),
                 )
             })
         }));
     }
 
     let mut forward_map: HashMap<Arc<String>, usize> = HashMap::default();
-    let mut reverse_map: HashMap<usize, (Arc<String>, NodeType)> = HashMap::default();
+    let mut reverse_map: HashMap<usize, Arc<NodeExternalState>> = HashMap::default();
 
     let mut owns_map: HashMap<u64, HashSet<usize>> = HashMap::default();
     struct TargetRefs {
@@ -589,12 +635,28 @@ async fn load_initial_graph(
 
     let mut idx: usize = 0;
     for li in load_i {
-        let (k, (compile_refs, defs, runtime_refs, entity_directives)) = li.await??;
+        let (
+            k,
+            (
+                compile_refs,
+                defs,
+                runtime_refs,
+                entity_directives,
+                binary_ref_directives,
+                manual_ref_directives,
+            ),
+        ) = li.await??;
 
         let m = Arc::new(k);
 
         forward_map.insert(m.clone(), idx);
-        reverse_map.insert(idx, (m.clone(), NodeType::RealNode));
+        let node_external_state = NodeExternalState {
+            name: m.clone(),
+            node_type: NodeType::RealNode,
+            binary_refs: binary_ref_directives,
+            manual_refs: manual_ref_directives,
+        };
+        reverse_map.insert(idx, Arc::new(node_external_state));
 
         for e in defs.iter() {
             match owns_map.entry(*e) {
@@ -605,7 +667,7 @@ async fn load_initial_graph(
                             .get()
                             .iter()
                             .flat_map(|l| reverse_map.get(l).into_iter())
-                            .map(|e| &e.0)
+                            .map(|e| &e.name)
                             .cloned()
                             .collect();
                         let d = all_defs.iter().find(|(_k, v)| *v == e).unwrap();
@@ -781,6 +843,8 @@ pub async fn build_graph(
     let mut build_mapping: HashMap<String, GraphNode> = HashMap::default();
 
     for (node, outbound_compile_edges) in graph.compile_edges.iter() {
+        let node_state = graph.reverse_map.get(node).unwrap();
+
         let mut child_nodes = Vec::default();
         let mut to_visit = vec![*node];
         while let Some(v) = to_visit.pop() {
@@ -792,28 +856,28 @@ pub async fn build_graph(
             }
         }
         let runtime_refs = graph.runtime_edges.get(node);
-        let k_name = graph.get_node_label(node).unwrap();
+        let k_name = graph.reverse_map.get(node).map(|e| e.name.clone()).unwrap();
 
-        let nodes = build_mapping
+        let output_node = build_mapping
             .entry(k_name.as_ref().clone())
             .or_insert_with(|| GraphNode::default());
 
-        nodes
-            .child_nodes
-            .extend(child_nodes.into_iter().filter_map(|c| {
-                let (nme, tpe) = graph.reverse_map.get(&c).expect("Graph invalid if missing");
-
-                match tpe {
-                    NodeType::Synthetic => None,
-                    NodeType::RealNode => Some(nme.as_ref().clone()),
-                }
-            }));
-        nodes.child_nodes.sort();
-        nodes.child_nodes.dedup();
+        for child_node in child_nodes.into_iter() {
+            let node_state = graph
+                .reverse_map
+                .get(&child_node)
+                .expect("Graph invalid if missing");
+            if node_state.node_type == NodeType::RealNode {
+                output_node.child_nodes.insert(
+                    node_state.name.as_str().to_string(),
+                    node_state.as_ref().into(),
+                );
+            }
+        }
 
         for outbound_edge in outbound_compile_edges.iter() {
             if let Some(t) = graph.get_node_label(outbound_edge) {
-                nodes.dependencies.push(t.as_ref().to_owned());
+                output_node.dependencies.push(t.to_owned());
             } else {
                 panic!(
                     "Unable to find outbound edge {} in the reverse map",
@@ -821,11 +885,11 @@ pub async fn build_graph(
                 );
             }
         }
-        nodes.dependencies.sort();
+        output_node.dependencies.sort();
 
         for outbound_runtime_edge in runtime_refs.as_ref().into_iter().flat_map(|e| e.iter()) {
             if let Some(t) = graph.get_node_label(outbound_runtime_edge) {
-                nodes.runtime_dependencies.push(t.as_ref().to_owned());
+                output_node.runtime_dependencies.push(t.to_owned());
             } else {
                 panic!(
                     "Unable to find outbound edge {} in the reverse map",
@@ -833,8 +897,9 @@ pub async fn build_graph(
                 );
             }
         }
-        nodes.node_type = graph.get_node_type(node).unwrap();
-        nodes.runtime_dependencies.sort();
+        output_node.node_type = node_state.node_type;
+        output_node.node_metadata = node_state.as_ref().into();
+        output_node.runtime_dependencies.sort();
     }
 
     let out = GraphMapping { build_mapping };

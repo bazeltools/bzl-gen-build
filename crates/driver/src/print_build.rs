@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     async_read_json_file,
-    build_graph::{GraphMapping, GraphNode},
+    build_graph::{GraphMapping, GraphNode, GraphNodeMetadata},
     Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
@@ -29,9 +29,10 @@ struct TargetEntry {
     pub name: String,
     pub required_load: HashMap<Arc<String>, Vec<Arc<String>>>,
     pub visibility: Option<Arc<String>>,
-    pub srcs: SrcType,
+    pub srcs: Option<SrcType>,
     pub target_type: Arc<String>,
     pub extra_kv_pairs: Vec<(String, Vec<String>)>,
+    pub extra_k_strs: Vec<(String, String)>,
 }
 
 impl TargetEntry {
@@ -43,7 +44,9 @@ impl TargetEntry {
             ast_builder::with_constant_str(self.name.clone()),
         ));
 
-        kw_args.push((Arc::new("srcs".to_string()), self.srcs.to_statement()));
+        if let Some(srcs) = &self.srcs {
+            kw_args.push((Arc::new("srcs".to_string()), srcs.to_statement()));
+        }
 
         for (k, v) in self.extra_kv_pairs.iter() {
             kw_args.push((
@@ -53,6 +56,13 @@ impl TargetEntry {
                         .map(|d| ast_builder::with_constant_str(d.to_string()))
                         .collect(),
                 ),
+            ));
+        }
+
+        for (k, v) in self.extra_k_strs.iter() {
+            kw_args.push((
+                Arc::new(k.clone()),
+                ast_builder::with_constant_str(v.to_string()),
             ));
         }
 
@@ -127,6 +137,7 @@ impl SrcType {
     }
 }
 
+#[derive(Debug)]
 struct TargetEntries {
     pub entries: Vec<TargetEntry>,
 }
@@ -168,6 +179,10 @@ impl TargetEntries {
             }
         }
 
+        let mut all_load_statements: Vec<(Arc<String>, Vec<Arc<String>>)> =
+            all_load_statements.into_iter().collect();
+        all_load_statements.sort();
+
         for (load_from, load_v) in all_load_statements {
             program.push(TargetEntries::load_statement(load_from, load_v));
         }
@@ -186,7 +201,7 @@ async fn print_file(
     graph_node: GraphNode,
     concurrent_io_operations: &'static Semaphore,
     element: String,
-) -> Result<()> {
+) -> Result<Vec<PathBuf>> {
     let mut module_config: Option<(&ModuleConfig, &'static str, &'static str)> = None;
     for (_k, v) in project_conf.configurations.iter() {
         let paths = v
@@ -225,9 +240,11 @@ async fn print_file(
             element
         ));
     };
+    let mut emitted_files = Vec::default();
 
     let target_folder = opt.working_directory.join(&element);
     let target_file = target_folder.join("BUILD.bazel");
+    emitted_files.push(target_file.clone());
     let target_name = target_folder
         .file_name()
         .unwrap()
@@ -346,6 +363,83 @@ async fn print_file(
 
     let mut parent_include_src = Vec::default();
 
+    fn apply_binaries(
+        target_entries: &mut TargetEntries,
+        node_metadata: &GraphNodeMetadata,
+        module_config: &ModuleConfig,
+        target_path: &str,
+    ) -> Result<()> {
+        if !node_metadata.binary_refs.is_empty() {
+            let build_config = match &module_config.build_config.binary_application {
+                Some(bc) => bc,
+                None => return Err(anyhow!("No binary config specified")),
+            };
+            let mut required_load = HashMap::default();
+
+            for h in build_config.headers.iter() {
+                required_load.insert(
+                    Arc::new(h.load_from.clone()),
+                    vec![Arc::new(h.load_value.clone())],
+                );
+            }
+
+            for bin in node_metadata.binary_refs.iter() {
+                match bin.binary_refs.command {
+                    directive::BinaryRefDirective::GenerateBinary => (),
+                };
+
+                let mut k_strs: Vec<(String, String)> = Default::default();
+
+                if let Some(ep) = &bin.entity_path {
+                    k_strs.push(("entity_path".to_string(), ep.to_string()));
+                }
+
+                if let Some(ep) = &bin.binary_refs.target_value {
+                    k_strs.push(("binary_refs_value".to_string(), ep.to_string()));
+                }
+
+                k_strs.push(("owning_library".to_string(), format!("//{}", target_path)));
+
+                target_entries.entries.push(TargetEntry {
+                    name: bin.binary_refs.binary_name.clone(),
+                    extra_kv_pairs: Vec::default(),
+                    extra_k_strs: k_strs,
+                    required_load: required_load.clone(),
+                    visibility: None,
+                    srcs: None,
+                    target_type: Arc::new(build_config.function_name.clone()),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    apply_binaries(&mut t, &graph_node.node_metadata, module_config, &element)?;
+
+    fn apply_manual_refs(
+        extra_kv_pairs: &mut HashMap<String, Vec<String>>,
+        node_metadata: &GraphNodeMetadata,
+    ) {
+        for manual_ref in node_metadata.manual_refs.iter() {
+            match &manual_ref.command {
+                directive::ManualRefDirective::RuntimeRef => {
+                    extra_kv_pairs
+                        .entry("runtime_deps".to_string())
+                        .or_default()
+                        .push(manual_ref.target_value.clone());
+                }
+                directive::ManualRefDirective::Ref => {
+                    extra_kv_pairs
+                        .entry("deps".to_string())
+                        .or_default()
+                        .push(manual_ref.target_value.clone());
+                }
+            }
+        }
+    }
+
+    apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
+
     match graph_node.node_type {
         crate::build_graph::NodeType::Synthetic => {}
         crate::build_graph::NodeType::RealNode => {
@@ -356,17 +450,18 @@ async fn print_file(
                 extra_kv_pairs: Vec::default(),
                 required_load: HashMap::default(),
                 visibility: None,
-                srcs: SrcType::Glob {
+                srcs: Some(SrcType::Glob {
                     include: vec![format!("**/*.{}", primary_extension)],
                     exclude: Vec::default(),
-                },
+                }),
                 target_type: Arc::new("filegroup".to_string()),
+                extra_k_strs: Vec::default(),
             };
             t.entries.push(filegroup_target);
         }
     }
 
-    for node in graph_node.child_nodes.iter() {
+    for (node, metadata) in graph_node.child_nodes.iter() {
         if let Some(folder_name) = node.split('/').filter(|e| !e.is_empty()).last() {
             parent_include_src.push(format!("//{}:{}_files", node, folder_name));
 
@@ -375,21 +470,30 @@ async fn print_file(
                 extra_kv_pairs: Vec::default(),
                 required_load: HashMap::default(),
                 visibility: None,
-                srcs: SrcType::Glob {
+                srcs: Some(SrcType::Glob {
                     include: vec![format!("**/*.{}", primary_extension)],
                     exclude: Vec::default(),
-                },
+                }),
                 target_type: Arc::new("filegroup".to_string()),
+                extra_k_strs: Vec::default(),
             };
-            let t = TargetEntries {
+
+            apply_manual_refs(&mut extra_kv_pairs, metadata);
+
+            let mut t = TargetEntries {
                 entries: vec![filegroup_target],
             };
 
+            apply_binaries(&mut t, metadata, module_config, &element)?;
+
             let _handle = concurrent_io_operations.acquire().await?;
             let sub_target = opt.working_directory.join(node).join("BUILD.bazel");
+            emitted_files.push(sub_target.clone());
             tokio::fs::write(&sub_target, t.emit_build_file()?)
                 .await
                 .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
+        } else {
+            return Err(anyhow!("Unable to extract folder name for node: {}", node));
         }
     }
 
@@ -405,8 +509,9 @@ async fn print_file(
             .collect(),
         required_load,
         visibility: None,
-        srcs: SrcType::List(parent_include_src),
+        srcs: Some(SrcType::List(parent_include_src)),
         target_type: Arc::new(build_config.function_name.clone()),
+        extra_k_strs: Vec::default(),
     };
 
     t.entries.push(target);
@@ -418,7 +523,7 @@ async fn print_file(
         .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
     drop(handle);
 
-    Ok(())
+    Ok(emitted_files)
 }
 
 async fn async_find_all_build_files(
@@ -481,8 +586,6 @@ pub async fn print_build(
         .into_iter()
         .filter(|(k, _v)| !k.starts_with('@'))
     {
-        let target_folder = opt.working_directory.join(&element).join("BUILD.bazel");
-        current_files.remove(&target_folder);
         let graph_node = graph_node.clone();
         res.push(tokio::spawn(async move {
             print_file(
@@ -497,7 +600,10 @@ pub async fn print_build(
     }
 
     while let Some(nxt) = res.pop() {
-        nxt.await??
+        let added_files = nxt.await??;
+        for f in added_files.iter() {
+            current_files.remove(f);
+        }
     }
 
     // These files are old and not updated..
@@ -553,11 +659,12 @@ scala_tests(
             )],
             required_load,
             visibility: None,
-            srcs: SrcType::Glob {
+            srcs: Some(SrcType::Glob {
                 include: vec!["*.scala".to_string()],
                 exclude: Vec::default(),
-            },
+            }),
             target_type: Arc::new("scala_tests".to_string()),
+            extra_k_strs: Vec::default(),
         });
 
         let target_entries = TargetEntries { entries };

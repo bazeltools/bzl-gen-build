@@ -11,7 +11,7 @@ use crate::{async_read_json_file, async_write_json_file, write_json_file, Extrac
 use anyhow::{anyhow, Context, Result};
 use bzl_gen_build_shared_types::{
     api::extracted_data::ExtractedData, internal_types::tree_node::TreeNode,
-    module_config::ModuleConfig, *,
+    module_config::ModuleConfig, Directive, ProjectConf,
 };
 use ignore::WalkBuilder;
 use log::info;
@@ -22,8 +22,6 @@ use tokio::sync::Semaphore;
 pub struct ExtractedMapping {
     pub path: String,
     pub content_sha: String,
-    #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
-    pub entity_directives: Vec<directive::EntityDirectiveConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -62,6 +60,8 @@ pub struct ExtractConfig {
 }
 
 async fn process_file(
+    relative_path: PathBuf,
+    working_directory: &'static PathBuf,
     path: PathBuf,
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
@@ -93,7 +93,12 @@ async fn process_file(
     } else {
         use tokio::process::Command;
         let mut command = Command::new(opt.extractor.path.as_path());
-        command.arg("--inputs").arg(path.as_path());
+        command
+            .arg("--relative-input-paths")
+            .arg(relative_path.as_path());
+        command
+            .arg("--working-directory")
+            .arg(working_directory.as_path());
         command.arg("--label-or-repo-path").arg(path.as_path());
         command.arg("--output").arg(target_path.as_path());
         command.kill_on_drop(true);
@@ -119,14 +124,15 @@ async fn process_file(
 }
 
 async fn async_extract_def_refs(
-    path: PathBuf,
+    working_directory: &'static PathBuf,
+    child_path: String,
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
 ) -> Result<((PathBuf, Duration), Vec<ProcessedFile>)> {
     let mut results: Vec<
         tokio::task::JoinHandle<Result<(ProcessedFile, Duration), anyhow::Error>>,
     > = Vec::default();
-    for entry in WalkBuilder::new(path)
+    for entry in WalkBuilder::new(working_directory.join(child_path))
         .build()
         .into_iter()
         .filter_map(|e| e.ok())
@@ -137,8 +143,19 @@ async fn async_extract_def_refs(
                 if opt.file_extensions.iter().any(|e| e.as_os_str() == ext) {
                     let opt = opt.clone();
 
+                    let e = entry
+                        .path()
+                        .strip_prefix(working_directory.as_path())?
+                        .to_path_buf();
                     results.push(tokio::spawn(async move {
-                        process_file(entry.into_path(), concurrent_io_operations, opt).await
+                        process_file(
+                            e,
+                            working_directory,
+                            entry.into_path(),
+                            concurrent_io_operations,
+                            opt,
+                        )
+                        .await
                     }));
                 }
             }
@@ -176,16 +193,8 @@ async fn merge_defrefs(
     );
 
     let treenode_path = path_sha_to_merged_defrefs.join(format!("{}.treenode", merged_sha));
-    let entity_directives_path =
-        path_sha_to_merged_defrefs.join(format!("{}.entity_directives", merged_sha));
 
-    #[derive(Debug, Serialize, Deserialize)]
-    pub struct EntityDirectives {
-        #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
-        pub entity_directives: Vec<directive::EntityDirectiveConfig>,
-    }
-
-    let entity_directives: Option<EntityDirectives> = if !treenode_path.exists() {
+    if !treenode_path.exists() {
         let mut existing: TreeNode = TreeNode::from_label(directory.clone());
         let c = concurrent_io_operations.acquire().await?;
 
@@ -214,21 +223,8 @@ async fn merge_defrefs(
         let directives = Directive::from_strings(&directive_strings)?;
         existing.apply_directives(&directives);
 
-        let ed = EntityDirectives {
-            entity_directives: existing.entity_directives.clone(),
-        };
-
-        if !ed.entity_directives.is_empty() {
-            async_write_json_file(&entity_directives_path, &ed).await?;
-        }
         async_write_json_file(&treenode_path, &existing).await?;
         drop(c);
-        Some(ed)
-    } else if entity_directives_path.exists() {
-        let _c = concurrent_io_operations.acquire().await?;
-        Some(async_read_json_file(&entity_directives_path).await?)
-    } else {
-        None
     };
 
     Ok((
@@ -236,9 +232,6 @@ async fn merge_defrefs(
         ExtractedMapping {
             path: treenode_path.to_string_lossy().to_string(),
             content_sha: format!("{}", merged_sha),
-            entity_directives: entity_directives
-                .map(|e| e.entity_directives)
-                .unwrap_or_default(),
         },
     ))
 }
@@ -376,11 +369,16 @@ async fn run_extractors_on_data<'a>(
     let mut async_join_handle: Vec<
         tokio::task::JoinHandle<Result<((PathBuf, Duration), Vec<ProcessedFile>)>>,
     > = Vec::default();
-    for (path, extract_config) in all_visiting_paths.iter() {
-        let p = opt.working_directory.join(path);
+    for (path, extract_config) in all_visiting_paths.into_iter() {
         let extract_config = extract_config.clone();
         async_join_handle.push(tokio::spawn(async move {
-            let r = async_extract_def_refs(p, concurrent_io_operations, extract_config).await?;
+            let r = async_extract_def_refs(
+                &opt.working_directory,
+                path,
+                concurrent_io_operations,
+                extract_config,
+            )
+            .await?;
             Ok(r)
         }));
     }

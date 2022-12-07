@@ -9,6 +9,9 @@ pub struct BuildConfig {
 
     #[serde(default)]
     pub test: Option<GrpBuildConfig>,
+
+    #[serde(default)]
+    pub binary_application: Option<GrpBuildConfig>,
 }
 
 impl BuildConfig {

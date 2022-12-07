@@ -30,12 +30,12 @@ abstract class DriverApplication extends IOApp {
     }
 
 
-  private[this] def extractDataBlocks(paths: String*): IO[List[DataBlock]] = {
+  private[this] def extractDataBlocks(workingDirectory: Path, paths: String*): IO[List[DataBlock]] = {
     paths.sorted.toList.traverse { path =>
         for {
-            content <- readToString(Paths.get(path))
+            content <- readToString(workingDirectory.resolve(path))
             e <- extract(content)
-        } yield e
+        } yield e.copy(entity_path = path)
     }
   }
   def main: Command[IO[ExitCode]] = decline.Command(
@@ -43,13 +43,14 @@ abstract class DriverApplication extends IOApp {
     "Extract definitions and references from source files"
   ) {
     (
-      Opts.option[String]("inputs", "input files to process"),
+      Opts.option[String]("relative-input-paths", "input files to process"),
+      Opts.option[Path]("working-directory", "input files to process"),
       Opts.option[String]("label-or-repo-path", "label to assign these files"),
       Opts.option[Path]("output", "target location to write to")
-    ).mapN { (inputs, label_or_repo_path, outputPath) =>
+    ).mapN { (inputs, workingDirectory, label_or_repo_path, outputPath) =>
       IO.pure(ExitCode.Success)
       for {
-        dataBlocks <- extractDataBlocks(inputs.split(',').toList:_*)
+        dataBlocks <- extractDataBlocks(workingDirectory, inputs.split(',').toList:_*)
         extractedData = ExtractedData(
             label_or_repo_path = label_or_repo_path,
             data_blocks = dataBlocks

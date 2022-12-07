@@ -133,9 +133,18 @@ pub struct ManualRefConfig {
     pub target_value: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BinaryRefAndPath {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_path: Option<String>,
+
+    pub binary_refs: BinaryRefConfig,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct BinaryRefConfig {
     pub command: BinaryRefDirective,
+    pub binary_name: String,
     pub target_value: Option<String>,
 }
 
@@ -184,35 +193,55 @@ impl Directive {
     fn parse_binary_ref_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> IResult<&'a str, Directive, E> {
+        let (input, _) = space0(input)?;
         let (input, src_d) = BinaryRefDirective::parse(input)?;
+        let (input, _) = nom::error::context(
+            "colon after the binary command",
+            tuple((space0, nom::bytes::complete::tag(":"), space0)),
+        )(input)?;
 
-        fn maybe_parse_target<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        let (input, (_, nme, _)) = nom::error::context(
+            "Extract target name",
+            tuple((
+                space0,
+                nom::bytes::complete::take_while1(|e: char| !(e.is_whitespace() || e == '@')),
+                space0,
+            )),
+        )(input)?;
+
+        fn parse_target<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
-        ) -> IResult<&'a str, Option<String>, E> {
+        ) -> IResult<&'a str, String, E> {
             let (input, _) = nom::error::context(
-                "colon after entity",
-                tuple((space0, nom::bytes::complete::tag(":"), space0)),
+                "@ after target name",
+                tuple((space0, nom::bytes::complete::tag("@"), space0)),
             )(input)?;
 
-            let (input, (_, r, _)) = tuple((
-                space0,
-                nom::bytes::complete::take_while1(|e: char| !e.is_whitespace()),
-                space0,
-            ))(input)?;
-            let (input, _) = nom::combinator::eof(input)?;
-            Ok((input, Some(r.to_string())))
+            let (input, (_, r, _)) = nom::error::context(
+                "Extract value from string",
+                tuple((
+                    space0,
+                    nom::bytes::complete::take_while1(|e: char| !e.is_whitespace()),
+                    space0,
+                )),
+            )(input)?;
+            Ok((input, r.to_string()))
         }
 
         let (input, maybe_target) = alt((
-            maybe_parse_target,
+            parse_target.map(Some),
             tuple((space0, nom::combinator::eof)).map(|_| None),
         ))(input)?;
+
+        let (input, _) =
+            nom::error::context("Should have consumed everything", nom::combinator::eof)(input)?;
 
         Ok((
             input,
             Directive::BinaryRef(BinaryRefConfig {
                 command: src_d,
                 target_value: maybe_target,
+                binary_name: nme.to_string(),
             }),
         ))
     }
@@ -332,9 +361,10 @@ impl std::fmt::Display for Directive {
             }
             Directive::BinaryRef(BinaryRefConfig {
                 command,
+                binary_name,
                 target_value,
             }) => {
-                write!(f, "{}", command)?;
+                write!(f, "{}:{}", command, binary_name)?;
                 if let Some(v) = target_value {
                     write!(f, "{}", v)?;
                 }
@@ -424,18 +454,29 @@ mod tests {
         );
 
         assert_eq!(
-            parse_to_directive("binary_generate"),
+            parse_to_directive("binary_generate: my_binary"),
             Directive::BinaryRef(BinaryRefConfig {
+                binary_name: "my_binary".to_string(),
                 command: BinaryRefDirective::GenerateBinary,
                 target_value: None
             })
         );
 
         assert_eq!(
-            parse_to_directive("binary_generate: com.foo.bar.baz"),
+            parse_to_directive("binary_generate: my_binary@ com.foo.bar.baz"),
             Directive::BinaryRef(BinaryRefConfig {
+                binary_name: "my_binary".to_string(),
                 command: BinaryRefDirective::GenerateBinary,
                 target_value: Some("com.foo.bar.baz".to_string())
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("binary_generate: invoke_tool @ com.foo.bar.Baz"),
+            Directive::BinaryRef(BinaryRefConfig {
+                binary_name: "invoke_tool".to_string(),
+                command: BinaryRefDirective::GenerateBinary,
+                target_value: Some("com.foo.bar.Baz".to_string())
             })
         );
     }

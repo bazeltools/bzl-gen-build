@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    directive::{BinaryRefConfig, EntityDirectiveConfig, ManualRefConfig, SrcDirectiveConfig},
+    directive::{BinaryRefAndPath, EntityDirectiveConfig, ManualRefConfig, SrcDirectiveConfig},
     Directive,
 };
 
@@ -27,7 +27,7 @@ pub struct TreeNode {
     pub manual_ref_directives: Vec<ManualRefConfig>,
 
     #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
-    pub binary_ref_directives: Vec<(Option<String>, BinaryRefConfig)>,
+    pub binary_ref_directives: Vec<BinaryRefAndPath>,
 }
 
 impl TryFrom<crate::api::extracted_data::DataBlock> for TreeNode {
@@ -42,7 +42,7 @@ impl TryFrom<crate::api::extracted_data::DataBlock> for TreeNode {
             ..Default::default()
         };
 
-        t.apply_directives(&directives);
+        t.apply_directives_with_path(&directives, Some(value.entity_path.as_str()));
 
         Ok(t)
     }
@@ -56,7 +56,7 @@ impl TreeNode {
         }
     }
 
-    fn apply_directives_with_path<'a, T>(&mut self, directives: T, entity_path: Option<&String>)
+    fn apply_directives_with_path<'a, T>(&mut self, directives: T, entity_path: Option<&str>)
     where
         T: IntoIterator<Item = &'a Directive> + Copy + std::fmt::Debug,
     {
@@ -74,9 +74,10 @@ impl TreeNode {
                 }
                 Directive::EntityDirective(ed) => self.entity_directives.push(ed.clone()),
                 Directive::ManualRef(mr) => self.manual_ref_directives.push(mr.clone()),
-                Directive::BinaryRef(mr) => self
-                    .binary_ref_directives
-                    .push((entity_path.map(|e| e.to_string()), mr.clone())),
+                Directive::BinaryRef(mr) => self.binary_ref_directives.push(BinaryRefAndPath {
+                    entity_path: entity_path.map(|e| e.to_string()),
+                    binary_refs: mr.clone(),
+                }),
             }
         }
         self.entity_directives.sort();

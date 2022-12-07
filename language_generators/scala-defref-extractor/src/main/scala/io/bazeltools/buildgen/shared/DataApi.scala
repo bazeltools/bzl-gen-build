@@ -16,6 +16,7 @@ object ExtractedData {
 }
 
 final case class DataBlock(
+      entity_path: String,
       defs: SortedSet[Entity],
       refs: SortedSet[Entity],
       bzl_gen_build_commands: SortedSet[String] = SortedSet.empty
@@ -31,13 +32,14 @@ final case class DataBlock(
   object DataBlock {
     implicit val dataBlockEncoder: Encoder[DataBlock] = deriveEncoder[DataBlock]
 
-    val empty: DataBlock = DataBlock(SortedSet.empty, SortedSet.empty)
+    val empty: DataBlock = DataBlock("",SortedSet.empty, SortedSet.empty)
 
     implicit val DataBlockMonoid: Monoid[DataBlock] =
       new Monoid[DataBlock] {
         def empty = DataBlock.empty
         def combine(left: DataBlock, right: DataBlock) =
           DataBlock(
+            entity_path = left.entity_path,
             left.defs | right.defs,
             left.refs | right.refs,
             left.bzl_gen_build_commands | right.bzl_gen_build_commands

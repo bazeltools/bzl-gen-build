@@ -165,7 +165,8 @@ mod tests {
                                 extra_key_to_list: HashMap::default(),
                                 extra_key_to_value: HashMap::default()
                             }),
-                            test: None
+                            test: None,
+                            binary_application: None
                         },
                         main_roots: vec!["src/main/python".to_string()],
                         test_roots: vec!["src/test/python".to_string()]

@@ -145,6 +145,15 @@ object JavaSourceEntityExtractor {
             refTypes ++= cid.getImplementedTypes().asScala
           case an: AnnotationExpr =>
             names += an.getNameAsString()
+          case compilationUnit: CompilationUnit =>
+              compilationUnit.getComments().asScala.foreach { c =>
+                Entity.findDirectives(c.getContent()) match {
+                  case Right(ds) =>
+                      allDirectives = allDirectives ++ ds
+                  case Left(err) =>
+                      sys.error(s"couldn't parse:\n${c.getContent()}\n-------------\n$err")
+              }
+              }
           case mc: MethodCallExpr =>
               // a.foo(b)
               // then a is the scope
@@ -218,7 +227,7 @@ object JavaSourceEntityExtractor {
 
     val refs = (rootRefs.flatMap(expand) #::: fixedImp #::: wildImp).to(SortedSet)
 
-    allDirectives.foldLeft(DataBlock(topLevelDefsTypes, refs)) { case (prev, n) => prev.addBzlBuildGenCommand(n)}
+    allDirectives.foldLeft(DataBlock("", topLevelDefsTypes, refs)) { case (prev, n) => prev.addBzlBuildGenCommand(n)}
   }
 
 }
