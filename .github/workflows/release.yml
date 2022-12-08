@@ -13,7 +13,7 @@ jobs:
         include:
           - os: macos-latest
             platform: macos
-            artifact: bzl-gen-build-macos
+            artifact: bzl-gen-build-macos-x86
           - os: ubuntu-20.04
             platform: linux-ubuntu-20.04
             artifact: bzl-gen-build-linux-ubuntu-20.04
@@ -50,7 +50,7 @@ jobs:
       - run: rustup component add rustfmt
       - run: rustup target add aarch64-apple-darwin
       - name: Prepare output
-        run: MACOS_ARM64_BUILD=true ./.github/ci_scripts/prepare_output.sh bzl-gen-build-${{ matrix.platform }}.tgz staging-directory
+        run: MACOS_ARM64_BUILD=true ./.github/ci_scripts/prepare_output.sh bzl-gen-build-macos-arm64.tgz staging-directory
       - uses: actions/upload-artifact@master
         with:
           name: bzl-gen-build-macos-arm64
@@ -78,7 +78,7 @@ jobs:
       - name: Download macos bzl-gen-build
         uses: actions/download-artifact@v1
         with:
-          name: bzl-gen-build-macos
+          name: bzl-gen-build-macos-x86
           path: downloads
       - name: Download macos arm64 bzl-gen-build
         uses: actions/download-artifact@v1
@@ -92,8 +92,8 @@ jobs:
           prerelease: false
           title: "Auto generated release for bzl-gen-build"
           files: |
-            downloads/bzl-gen-build-macos.tgz
-            downloads/bzl-gen-build-macos.tgz.sha256
+            downloads/bzl-gen-build-macos-x86.tgz
+            downloads/bzl-gen-build-macos-x86.tgz.sha256
             downloads/bzl-gen-build-macos-arm64.tgz
             downloads/bzl-gen-build-macos-arm64.tgz.sha256
             downloads/bzl-gen-build-linux-ubuntu-20.04.tgz
