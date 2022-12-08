@@ -40,3 +40,6 @@ echo "workspace(name = \"external_build_tooling_gen\")" > $PREPARE_ALL_OUTPUT_DI
 cat > $PREPARE_ALL_OUTPUT_DIR/BUILD.bazel <<EOF
 exports_files(["WORKSPACE", "python-entity-extractor"])
 EOF
+
+
+echo "Wrote all outputs to $PREPARE_ALL_OUTPUT_DIR" 1>&2
