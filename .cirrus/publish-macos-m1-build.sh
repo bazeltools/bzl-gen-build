@@ -23,10 +23,19 @@ fi
 
 file_content_type="application/octet-stream"
 
-name="bzl-gen-build-macos-arm64.tgz"
-url_to_upload="https://uploads.github.com/repos/$CIRRUS_REPO_FULL_NAME/releases/$CIRRUS_RELEASE/assets?name=$name"
-curl -X POST \
---data-binary @staging-directory/bzl-gen-build-macos-arm64.tgz \
---header "Authorization: token $GITHUB_TOKEN" \
---header "Content-Type: $file_content_type" \
-$url_to_upload
+files_to_upload=(
+  bzl-gen-build-macos-arm64.tgz
+  bzl-gen-build-macos-arm64.tgz.sha256
+)
+
+for fpath in $files_to_upload
+do
+  echo "Uploading $fpath..."
+  name=$(basename "$fpath")
+  url_to_upload="https://uploads.github.com/repos/$CIRRUS_REPO_FULL_NAME/releases/$CIRRUS_RELEASE/assets?name=$name"
+  curl -X POST \
+    --data-binary @$fpath \
+    --header "Authorization: token $GITHUB_TOKEN" \
+    --header "Content-Type: $file_content_type" \
+    $url_to_upload
+done
