@@ -1,77 +1,77 @@
-name: Release
-on:
-  push:
-    branches:
-      - main
-jobs:
-  rust-binaries:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [macos-latest, ubuntu-20.04, ubuntu-18.04]
-        include:
-          - os: macos-latest
-            platform: macos-x86
-            artifact: bzl-gen-build-macos-x86
-          - os: ubuntu-20.04
-            platform: linux-ubuntu-20.04
-            artifact: bzl-gen-build-linux-ubuntu-20.04
-          - os: ubuntu-18.04
-            platform: linux-ubuntu-18.04
-            artifact: bzl-gen-build-linux-ubuntu-18.04
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v1
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - run: rustup component add rustfmt
-      - name: Prepare output
-        run: ./.github/ci_scripts/prepare_output.sh bzl-gen-build-${{ matrix.platform }}.tgz staging-directory
-      - uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.artifact }}
-          path: staging-directory
-  make_release:
-    name: Make release
-    needs: [rust-binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v1
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Download linux ubuntu 20 bzl-gen-build
-        uses: actions/download-artifact@v1
-        with:
-          name: bzl-gen-build-linux-ubuntu-20.04
-          path: downloads
-      - name: Download linux bzl-gen-build 18
-        uses: actions/download-artifact@v1
-        with:
-          name: bzl-gen-build-linux-ubuntu-18.04
-          path: downloads
-      - name: Download macos bzl-gen-build
-        uses: actions/download-artifact@v1
-        with:
-          name: bzl-gen-build-macos-x86
-          path: downloads
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "v0.1-${{ github.run_number }}"
-          prerelease: false
-          title: "Auto generated release for bzl-gen-build"
-          files: |
-            downloads/bzl-gen-build-macos-x86.tgz
-            downloads/bzl-gen-build-macos-x86.tgz.sha256
-            downloads/bzl-gen-build-linux-ubuntu-20.04.tgz
-            downloads/bzl-gen-build-linux-ubuntu-20.04.tgz.sha256
-            downloads/bzl-gen-build-linux-ubuntu-18.04.tgz
-            downloads/bzl-gen-build-linux-ubuntu-18.04.tgz.sha256
-        id: "automatic_releases"
+# name: Release
+# on:
+#   push:
+#     branches:
+#       - main
+# jobs:
+#   rust-binaries:
+#     runs-on: ${{ matrix.os }}
+#     strategy:
+#       fail-fast: true
+#       matrix:
+#         os: [macos-latest, ubuntu-20.04, ubuntu-18.04]
+#         include:
+#           - os: macos-latest
+#             platform: macos-x86
+#             artifact: bzl-gen-build-macos-x86
+#           - os: ubuntu-20.04
+#             platform: linux-ubuntu-20.04
+#             artifact: bzl-gen-build-linux-ubuntu-20.04
+#           - os: ubuntu-18.04
+#             platform: linux-ubuntu-18.04
+#             artifact: bzl-gen-build-linux-ubuntu-18.04
+#     steps:
+#       - uses: actions/checkout@v2
+#       - name: Install Protoc
+#         uses: arduino/setup-protoc@v1
+#         with:
+#           repo-token: ${{ secrets.GITHUB_TOKEN }}
+#       - uses: actions-rs/toolchain@v1
+#         with:
+#           toolchain: stable
+#       - run: rustup component add rustfmt
+#       - name: Prepare output
+#         run: ./.github/ci_scripts/prepare_output.sh bzl-gen-build-${{ matrix.platform }}.tgz staging-directory
+#       - uses: actions/upload-artifact@master
+#         with:
+#           name: ${{ matrix.artifact }}
+#           path: staging-directory
+#   make_release:
+#     name: Make release
+#     needs: [rust-binaries]
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v2
+#       - name: Install Protoc
+#         uses: arduino/setup-protoc@v1
+#         with:
+#           repo-token: ${{ secrets.GITHUB_TOKEN }}
+#       - name: Download linux ubuntu 20 bzl-gen-build
+#         uses: actions/download-artifact@v1
+#         with:
+#           name: bzl-gen-build-linux-ubuntu-20.04
+#           path: downloads
+#       - name: Download linux bzl-gen-build 18
+#         uses: actions/download-artifact@v1
+#         with:
+#           name: bzl-gen-build-linux-ubuntu-18.04
+#           path: downloads
+#       - name: Download macos bzl-gen-build
+#         uses: actions/download-artifact@v1
+#         with:
+#           name: bzl-gen-build-macos-x86
+#           path: downloads
+#       - uses: "marvinpinto/action-automatic-releases@latest"
+#         with:
+#           repo_token: "${{ secrets.GITHUB_TOKEN }}"
+#           automatic_release_tag: "v0.1-${{ github.run_number }}"
+#           prerelease: false
+#           title: "Auto generated release for bzl-gen-build"
+#           files: |
+#             downloads/bzl-gen-build-macos-x86.tgz
+#             downloads/bzl-gen-build-macos-x86.tgz.sha256
+#             downloads/bzl-gen-build-linux-ubuntu-20.04.tgz
+#             downloads/bzl-gen-build-linux-ubuntu-20.04.tgz.sha256
+#             downloads/bzl-gen-build-linux-ubuntu-18.04.tgz
+#             downloads/bzl-gen-build-linux-ubuntu-18.04.tgz.sha256
+#         id: "automatic_releases"
