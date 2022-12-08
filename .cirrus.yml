@@ -3,7 +3,7 @@ macos_instance:
   image: ghcr.io/cirruslabs/macos-ventura-xcode:latest
 
 task:
-  # only_if: $CIRRUS_RELEASE != ''
+  only_if: $CIRRUS_RELEASE != ''
   script: ./.cirrus/publish-macos-m1-build.sh
   env:
     GITHUB_TOKEN: ENCRYPTED[!a017be48f31cd4ab33b145687dae10069724ca68113688372bf51d13a5ee5463063f197d1fb8f4c3f09cb639ad56d548!]
