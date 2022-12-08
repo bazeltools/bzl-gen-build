@@ -66,7 +66,6 @@ async fn process_file(
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
 ) -> Result<(ProcessedFile, Duration)> {
-    let st = Instant::now();
     let sha256 = {
         let c = concurrent_io_operations.acquire().await?;
         let r = Sha256Value::from_path(path.as_path()).await.map_err(|e| {
@@ -79,6 +78,7 @@ async fn process_file(
         drop(c);
         r
     };
+    let st = Instant::now();
 
     let target_path = opt.sha_to_extract_root.join(format!("{}", sha256));
 
