@@ -1,6 +1,6 @@
 
 macos_instance:
-  image: ghcr.io/cirruslabs/macos-ventura-base:latest
+  image: ghcr.io/cirruslabs/macos-ventura-xcode:latest
 
 task:
   script: ./.cirrus/publish-macos-m1-build.sh

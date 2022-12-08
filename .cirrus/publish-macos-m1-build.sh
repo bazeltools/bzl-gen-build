@@ -2,6 +2,7 @@
 
 
 # export MACOS_ARM64_BUILD=true
+brew install java11
 
 ./.github/ci_scripts/prepare_output.sh bzl-gen-build-macos-arm64.tgz staging-directory
 
