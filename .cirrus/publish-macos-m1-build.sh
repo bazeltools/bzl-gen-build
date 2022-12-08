@@ -4,6 +4,10 @@
 # export MACOS_ARM64_BUILD=true
 brew install java11
 
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+export PATH=$PATH:$HOME/.cargo/bin
+
 ./.github/ci_scripts/prepare_output.sh bzl-gen-build-macos-arm64.tgz staging-directory
 
 
