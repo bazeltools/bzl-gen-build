@@ -49,4 +49,15 @@ These are applied locally to the files they are applied against. These can alter
 - `runtime_ref`, Add a new runtime definition, since things only needed at runtime cannot usually be seen from the source code these can help indicate types/sources needed to run this in tests/deployment.
 - `runtime_unref`, the dual of the above, though generally not really used often
 
-... more to do.
+## Directives: Entity directives
+These are used to try build extra links into the chain of dependencies.
+- `link`, This has the form of connecting one entity to several others. That is if target `A` depends on `com.foo.Bar`, and a link exists connecting `com.foo.Bar` to `com.animal.Cat, com.animal.Dog`. Then when we see `com.foo.Bar` as a dependency of any target, such as `A`, it will act as if it also depends on `Cat` and `Dog.
+
+## Directives: Manual reference directive
+These directives are used as late applying commands, they will alter the final printed build file, but not be considered in graph resolution.
+- `manual_runtime_ref`, add a runtime dependency on the _target_ given. That is, not an entity but an actual target addressable in the build.
+- `manual_ref`, add a compile time dependency on the _target_ given. That is, not an entity but an actual target addressable in the build.
+
+## Directives: Binary reference directive
+Today there is only a single form of this, though more though probably should go into this. And if it should merge with the manual directives above. This is used to generate binary targets.
+- `binary_generate: binary_name[@ target_value]`  , This will generate a binary called `binary_name`, and optionally we pass in some information (such as a jvm class name), to the rule that generates the binary.
