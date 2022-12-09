@@ -1,7 +1,6 @@
 #!/bin/bash -e
 
 
-# export MACOS_ARM64_BUILD=true
 brew install java11
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
