@@ -35,7 +35,7 @@ do
   echo "Uploading $fpath..."
   name=$(basename "$fpath")
   url_to_upload="https://uploads.github.com/repos/$CIRRUS_REPO_FULL_NAME/releases/$CIRRUS_RELEASE/assets?name=$name"
-  curl -X POST \
+  curl --fail -X POST \
     --data-binary @$WORKING_DIRECTORY/stagin-directory/$fpath \
     --header "Authorization: token $GITHUB_TOKEN" \
     --header "Content-Type: $file_content_type" \
