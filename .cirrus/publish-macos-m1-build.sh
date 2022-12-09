@@ -1,8 +1,10 @@
 #!/bin/bash -e
 
-
 brew install java11
-
+sudo ln -sfn /opt/homebrew/opt/openjdk@11/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-11.jdk
+export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
+export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
+export JAVA_HOME="/opt/homebrew/opt/openjdk@11"
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 export PATH=$PATH:$HOME/.cargo/bin
@@ -10,7 +12,6 @@ export PATH=$PATH:$HOME/.cargo/bin
 WORKING_DIRECTORY=`pwd`
 
 ./.github/ci_scripts/prepare_output.sh bzl-gen-build-macos-arm64.tgz staging-directory
-
 
 if [[ "$CIRRUS_RELEASE" == "" ]]; then
   echo "Not a release. No need to deploy!"
