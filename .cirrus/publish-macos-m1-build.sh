@@ -28,8 +28,8 @@ files_to_upload=(
   $WORKING_DIRECTORY/staging-directory/bzl-gen-build-macos-arm64.tgz.sha256
   $WORKING_DIRECTORY/staging-directory/bzl-gen-build-macos-arm64.tgz
 )
-ls $WORKING_DIRECTORY/staging-directory
-for fpath in $files_to_upload
+
+for fpath in "${files_to_upload[@]}"
 do
   echo "Uploading $fpath..."
   name=$(basename "$fpath")
