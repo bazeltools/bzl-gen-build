@@ -271,6 +271,8 @@ object ScalaSourceEntityExtractor {
         referTo(op) *> (term :: args).traverse_(definePat)
       case Pat.SeqWildcard() => unitEnv
       case _: Lit            => unitEnv
+      case tn: Term.Name =>
+        referTo(tn)
       case other =>
         sys.error(s"unexpected: $other, ${other.getClass}")
     }

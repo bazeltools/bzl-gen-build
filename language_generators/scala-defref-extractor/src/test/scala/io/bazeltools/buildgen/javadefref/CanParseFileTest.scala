@@ -1,6 +1,5 @@
 package io.bazeltools.buildgen.javadefref
 
-import java.nio.file.Paths
 import org.scalatest.funsuite.AnyFunSuite
 import io.bazeltools.buildgen.shared._
 import scala.collection.immutable.SortedSet

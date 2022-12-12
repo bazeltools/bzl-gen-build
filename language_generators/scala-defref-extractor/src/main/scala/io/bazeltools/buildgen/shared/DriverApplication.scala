@@ -36,7 +36,16 @@ abstract class DriverApplication extends IOApp {
     paths.sorted.toList.traverse { path =>
       for {
         content <- readToString(workingDirectory.resolve(path))
-        e <- extract(content)
+        try_e <- extract(content).attempt
+        e <- try_e match {
+          case Right(x) => IO.pure(x)
+          case Left(f) =>
+            IO.raiseError(
+              new Exception(
+                s"Failed in parsing of ${workingDirectory.resolve(path)}, with error\n$f"
+              )
+            )
+        }
       } yield e.copy(entity_path = path)
     }
   }
