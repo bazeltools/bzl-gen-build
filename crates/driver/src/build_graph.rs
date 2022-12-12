@@ -425,7 +425,7 @@ impl GraphState {
         c_edges.chain(r_edges)
     }
 
-    fn collapse_loop(&mut self, no_loops: &mut  HashSet<usize>, element: usize) -> Result<bool> {
+    fn collapse_loop(&mut self, element: usize) -> Result<Option<usize>> {
         let mut reverse_steps: HashMap<usize, usize> = HashMap::default();
         let mut to_visit: Vec<usize> = vec![element];
 
@@ -455,13 +455,9 @@ impl GraphState {
         if to_collapse.len() > 1 {
             let target = self.find_or_create_common_ancestor(&to_collapse)?;
             self.merge_node(target, &to_collapse)?;
-            for node in to_collapse.iter() {
-                no_loops.remove(node);
-            }
-            no_loops.remove(&target);
-            Ok(true)
+            Ok(Some(target))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
@@ -505,7 +501,11 @@ impl GraphState {
                 }
             }
             if let Some(i) = incompress {
-                self.collapse_loop(&mut no_loops, i)?;
+                if let Some(target) = self.collapse_loop(i)? {
+                    // Since we can merge to a 3rd node not in the dependency graph, that node needs to be re-added to the
+                    // to visit graph, since it may have been eliminated before.
+                    no_loops.remove(&target);
+                };
                 self.common_ancestor()?;
             } else {
                 return Ok(());
