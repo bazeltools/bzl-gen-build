@@ -390,9 +390,17 @@ impl GraphState {
             Ok(())
         }
 
-        let consumed_nodes = self.consumed_nodes.entry(destination).or_default();
+
+        let mut consumed_nodes = self.consumed_nodes.remove(&destination).unwrap_or_default();
         consumed_nodes.extend(src.into_iter().copied());
+        for x in src.into_iter() {
+            if let Some(c) = self.consumed_nodes.remove(&x){
+                consumed_nodes.extend(c.into_iter());
+            }
+        }
+
         consumed_nodes.remove(&destination);
+        self.consumed_nodes.insert(destination, consumed_nodes);
 
         consume_edges(&mut self.compile_edges, destination, true, src)?;
         consume_edges(&mut self.runtime_edges, destination, false, src)?;
@@ -417,7 +425,7 @@ impl GraphState {
         c_edges.chain(r_edges)
     }
 
-    fn collapse_loop(&mut self, element: usize) -> Result<bool> {
+    fn collapse_loop(&mut self, no_loops: &mut  HashSet<usize>, element: usize) -> Result<bool> {
         let mut reverse_steps: HashMap<usize, usize> = HashMap::default();
         let mut to_visit: Vec<usize> = vec![element];
 
@@ -447,6 +455,10 @@ impl GraphState {
         if to_collapse.len() > 1 {
             let target = self.find_or_create_common_ancestor(&to_collapse)?;
             self.merge_node(target, &to_collapse)?;
+            for node in to_collapse.iter() {
+                no_loops.remove(node);
+            }
+            no_loops.remove(&target);
             Ok(true)
         } else {
             Ok(false)
@@ -493,7 +505,7 @@ impl GraphState {
                 }
             }
             if let Some(i) = incompress {
-                self.collapse_loop(i)?;
+                self.collapse_loop(&mut no_loops, i)?;
                 self.common_ancestor()?;
             } else {
                 return Ok(());
