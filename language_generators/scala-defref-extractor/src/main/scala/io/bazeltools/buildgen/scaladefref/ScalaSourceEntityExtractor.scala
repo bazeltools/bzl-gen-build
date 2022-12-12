@@ -45,7 +45,9 @@ object ScalaSourceEntityExtractor {
       .map { tree =>
         val allDirectives = parseDirectives(tree)
         val dr = getDefsRefs(tree)
-        allDirectives.foldLeft(dr) { case (prev, n) => prev.addBzlBuildGenCommand(n)}
+        allDirectives.foldLeft(dr) { case (prev, n) =>
+          prev.addBzlBuildGenCommand(n)
+        }
       }
 
   sealed abstract class NamePart {

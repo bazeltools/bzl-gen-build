@@ -12,6 +12,10 @@ libraryDependencies += "io.circe" %% "circe-core" % "0.14.3"
 libraryDependencies += "io.circe" %% "circe-generic" % "0.14.3"
 libraryDependencies += "com.github.javaparser" % "javaparser-core" % "3.24.8"
 
+libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.14" % "test"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.14" % "test"
+
+
 scalacOptions += "-deprecation"
 scalacOptions += "-Wunused"
 

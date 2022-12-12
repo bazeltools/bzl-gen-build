@@ -29,13 +29,15 @@ abstract class DriverApplication extends IOApp {
       )
     }
 
-
-  private[this] def extractDataBlocks(workingDirectory: Path, paths: String*): IO[List[DataBlock]] = {
+  private[this] def extractDataBlocks(
+      workingDirectory: Path,
+      paths: String*
+  ): IO[List[DataBlock]] = {
     paths.sorted.toList.traverse { path =>
-        for {
-            content <- readToString(workingDirectory.resolve(path))
-            e <- extract(content)
-        } yield e.copy(entity_path = path)
+      for {
+        content <- readToString(workingDirectory.resolve(path))
+        e <- extract(content)
+      } yield e.copy(entity_path = path)
     }
   }
   def main: Command[IO[ExitCode]] = decline.Command(
@@ -50,10 +52,13 @@ abstract class DriverApplication extends IOApp {
     ).mapN { (inputs, workingDirectory, label_or_repo_path, outputPath) =>
       IO.pure(ExitCode.Success)
       for {
-        dataBlocks <- extractDataBlocks(workingDirectory, inputs.split(',').toList:_*)
+        dataBlocks <- extractDataBlocks(
+          workingDirectory,
+          inputs.split(',').toList: _*
+        )
         extractedData = ExtractedData(
-            label_or_repo_path = label_or_repo_path,
-            data_blocks = dataBlocks
+          label_or_repo_path = label_or_repo_path,
+          data_blocks = dataBlocks
         )
         _ <- writeJson(outputPath, extractedData)
       } yield ExitCode.Success

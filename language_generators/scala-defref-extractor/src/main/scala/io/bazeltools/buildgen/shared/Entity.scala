@@ -105,10 +105,15 @@ object Entity {
     // bzl_gen_build:dir:entity
     // Alternative here, for other name we've used
     val spaces0 = Parser.charIn(" \t").rep0
-    val bzlBuildGen = ((Parser.string("bzl_gen_build").orElse(Parser.string("depgraph"))).surroundedBy(spaces0) *> Parser.string(":")).surroundedBy(spaces0)
+    val bzlBuildGen = ((Parser
+      .string("bzl_gen_build")
+      .orElse(Parser.string("depgraph")))
+      .surroundedBy(spaces0) *> Parser.string(":")).surroundedBy(spaces0)
     val newLine = Parser.charIn("\r\n").void
 
-    Parsers.repSkip(bzlBuildGen *> Parsers.notThen(newLine, Parser.anyChar).rep.string)
+    Parsers.repSkip(
+      bzlBuildGen *> Parsers.notThen(newLine, Parser.anyChar).rep.string
+    )
   }
 
   def findDirectives(str: String): Either[String, Chain[String]] = {
