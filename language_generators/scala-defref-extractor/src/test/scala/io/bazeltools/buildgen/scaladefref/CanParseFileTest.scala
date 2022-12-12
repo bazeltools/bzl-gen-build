@@ -108,4 +108,49 @@ SortedSet()
     assertParse(simpleContent, expectedDataBlock)
   }
 
+  test("can extract a failing file 2") {
+    val simpleContent = """
+package com.foo.bar
+trait TestTrait {
+  def foo(): Long = {
+      combinedParams.underlying.collect {
+        case (param: OtherTrait[param], value: String) if outCols.contains(param) => (param, value)
+      }
+  }
+}
+    """
+    val expectedDataBlock = DataBlock("",
+SortedSet(
+    Entity.dotted("com.foo.bar.TestTrait"),
+    Entity.dotted("com.foo.bar.TestTrait.foo"),
+),
+SortedSet(Entity.dotted("Long"),
+    Entity.dotted("OtherTrait"),
+    Entity.dotted("String"),
+    Entity.dotted("com.foo.bar.Long"),
+    Entity.dotted("com.foo.bar.OtherTrait"),
+    Entity.dotted("com.foo.bar.String"),
+    Entity.dotted("com.foo.bar.combinedParams"),
+    Entity.dotted("com.foo.bar.combinedParams.underlying"),
+    Entity.dotted("com.foo.bar.combinedParams.underlying.collect"),
+    Entity.dotted("com.foo.bar.outCols"),
+    Entity.dotted("com.foo.bar.outCols.contains"),
+    Entity.dotted("com.foo.bar.param"),
+    Entity.dotted("com.foo.bar.value"),
+    Entity.dotted("combinedParams"),
+    Entity.dotted("combinedParams.underlying"),
+    Entity.dotted("combinedParams.underlying.collect"),
+    Entity.dotted("outCols"),
+    Entity.dotted("outCols.contains"),
+    Entity.dotted("param"),
+    Entity.dotted("value"),
+),
+SortedSet())
+
+    assertParse(simpleContent, expectedDataBlock)
+  }
+
+
+
+
 }

@@ -271,8 +271,7 @@ object ScalaSourceEntityExtractor {
         referTo(op) *> (term :: args).traverse_(definePat)
       case Pat.SeqWildcard() => unitEnv
       case _: Lit            => unitEnv
-      case tn: Term.Name =>
-        referTo(tn)
+      case tn: Term.Name     => referTo(tn)
       case other =>
         sys.error(s"unexpected: $other, ${other.getClass}")
     }
@@ -579,6 +578,9 @@ object ScalaSourceEntityExtractor {
           vbounds.traverse_(inspect),
           cbounds.traverse_(inspect)
         ).sequence_
+      case Type.Var(name) =>
+        log(s"Type.Var($name)")
+        unitEnv
       case Type.Project(tpe, name) =>
         // Foo#Bar
         log(s"Type.Project($tpe, $name)")
