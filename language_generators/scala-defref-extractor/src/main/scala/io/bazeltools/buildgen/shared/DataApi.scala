@@ -23,6 +23,7 @@ final case class DataBlock(
 ) {
   def addDef(e: Entity) = copy(defs = defs + e)
   def addRef(e: Entity) = copy(refs = refs + e)
+  def addLink(src: Entity, dests: List[Entity]) = this
   def addBzlBuildGenCommand(e: String) =
     copy(bzl_gen_build_commands = bzl_gen_build_commands + e)
   def addBzlBuildGenCommands(e: Iterable[String]) =
