@@ -284,10 +284,10 @@ async fn print_file(
         extra_kv_pairs.insert("runtime_deps".to_string(), deps);
     }
 
-    let build_config = if path_type == "test" {
-        &module_config.build_config.test
+    let (build_config, use_rglob) = if path_type == "test" {
+        (&module_config.build_config.test, true)
     } else {
-        &module_config.build_config.main
+        (&module_config.build_config.main, false)
     };
 
     let build_config = if let Some(bc) = build_config {
@@ -440,81 +440,107 @@ async fn print_file(
 
     apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
 
-    match graph_node.node_type {
-        crate::build_graph::NodeType::Synthetic => {}
-        crate::build_graph::NodeType::RealNode => {
-            parent_include_src.push(format!(":{}", filegroup_target_name));
+    if use_rglob {
+        let target = TargetEntry {
+            name: target_name.clone(),
+            extra_kv_pairs: extra_kv_pairs
+                .into_iter()
+                .map(|(k, mut v)| {
+                    v.sort();
+                    v.dedup();
+                    (k, v)
+                })
+                .collect(),
+            required_load,
+            visibility: None,
+            srcs: Some(SrcType::Glob {
+                include: vec![format!("**/*.{}", primary_extension)],
+                exclude: Vec::default(),
+            }),
+            target_type: Arc::new(build_config.function_name.clone()),
+            extra_k_strs: Vec::default(),
+        };
 
-            let filegroup_target = TargetEntry {
-                name: filegroup_target_name.clone(),
-                extra_kv_pairs: Vec::default(),
-                required_load: HashMap::default(),
-                visibility: None,
-                srcs: Some(SrcType::Glob {
-                    include: vec![format!("**/*.{}", primary_extension)],
-                    exclude: Vec::default(),
-                }),
-                target_type: Arc::new("filegroup".to_string()),
-                extra_k_strs: Vec::default(),
-            };
-            t.entries.push(filegroup_target);
+        t.entries.push(target);
+    } else {
+        match graph_node.node_type {
+            crate::build_graph::NodeType::Synthetic => {}
+            crate::build_graph::NodeType::RealNode => {
+                parent_include_src.push(format!(":{}", filegroup_target_name));
+
+                let filegroup_target = TargetEntry {
+                    name: filegroup_target_name.clone(),
+                    extra_kv_pairs: Vec::default(),
+                    required_load: HashMap::default(),
+                    visibility: None,
+                    srcs: Some(SrcType::Glob {
+                        include: vec![format!("**/*.{}", primary_extension)],
+                        exclude: Vec::default(),
+                    }),
+                    target_type: Arc::new("filegroup".to_string()),
+                    extra_k_strs: Vec::default(),
+                };
+                t.entries.push(filegroup_target);
+            }
         }
-    }
 
-    for (node, metadata) in graph_node.child_nodes.iter() {
-        if let Some(folder_name) = node.split('/').filter(|e| !e.is_empty()).last() {
-            parent_include_src.push(format!("//{}:{}_files", node, folder_name));
+        for (node, metadata) in graph_node.child_nodes.iter() {
+            if let Some(folder_name) = node.split('/').filter(|e| !e.is_empty()).last() {
+                parent_include_src.push(format!("//{}:{}_files", node, folder_name));
 
-            let filegroup_target = TargetEntry {
-                name: format!("{}_files", folder_name),
-                extra_kv_pairs: Vec::default(),
-                required_load: HashMap::default(),
-                visibility: None,
-                srcs: Some(SrcType::Glob {
-                    include: vec![format!("**/*.{}", primary_extension)],
-                    exclude: Vec::default(),
-                }),
-                target_type: Arc::new("filegroup".to_string()),
-                extra_k_strs: Vec::default(),
-            };
+                let filegroup_target = TargetEntry {
+                    name: format!("{}_files", folder_name),
+                    extra_kv_pairs: Vec::default(),
+                    required_load: HashMap::default(),
+                    visibility: None,
+                    srcs: Some(SrcType::Glob {
+                        include: vec![format!("**/*.{}", primary_extension)],
+                        exclude: Vec::default(),
+                    }),
+                    target_type: Arc::new("filegroup".to_string()),
+                    extra_k_strs: Vec::default(),
+                };
 
-            apply_manual_refs(&mut extra_kv_pairs, metadata);
+                apply_manual_refs(&mut extra_kv_pairs, metadata);
 
-            let mut t = TargetEntries {
-                entries: vec![filegroup_target],
-            };
+                let mut t = TargetEntries {
+                    entries: vec![filegroup_target],
+                };
 
-            apply_binaries(&mut t, metadata, module_config, &element)?;
+                apply_binaries(&mut t, metadata, module_config, &element)?;
 
-            let _handle = concurrent_io_operations.acquire().await?;
-            let sub_target = opt.working_directory.join(node).join("BUILD.bazel");
-            emitted_files.push(sub_target.clone());
-            tokio::fs::write(&sub_target, t.emit_build_file()?)
-                .await
-                .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
-        } else {
-            return Err(anyhow!("Unable to extract folder name for node: {}", node));
+                let _handle = concurrent_io_operations.acquire().await?;
+                let sub_target = opt.working_directory.join(node).join("BUILD.bazel");
+                emitted_files.push(sub_target.clone());
+                tokio::fs::write(&sub_target, t.emit_build_file()?)
+                    .await
+                    .with_context(|| {
+                        format!("Attempting to write file data to {:?}", target_file)
+                    })?;
+            } else {
+                return Err(anyhow!("Unable to extract folder name for node: {}", node));
+            }
         }
+
+        let target = TargetEntry {
+            name: target_name.clone(),
+            extra_kv_pairs: extra_kv_pairs
+                .into_iter()
+                .map(|(k, mut v)| {
+                    v.sort();
+                    v.dedup();
+                    (k, v)
+                })
+                .collect(),
+            required_load,
+            visibility: None,
+            srcs: Some(SrcType::List(parent_include_src)),
+            target_type: Arc::new(build_config.function_name.clone()),
+            extra_k_strs: Vec::default(),
+        };
+
+        t.entries.push(target);
     }
-
-    let target = TargetEntry {
-        name: target_name.clone(),
-        extra_kv_pairs: extra_kv_pairs
-            .into_iter()
-            .map(|(k, mut v)| {
-                v.sort();
-                v.dedup();
-                (k, v)
-            })
-            .collect(),
-        required_load,
-        visibility: None,
-        srcs: Some(SrcType::List(parent_include_src)),
-        target_type: Arc::new(build_config.function_name.clone()),
-        extra_k_strs: Vec::default(),
-    };
-
-    t.entries.push(target);
 
     let handle = concurrent_io_operations.acquire().await?;
 

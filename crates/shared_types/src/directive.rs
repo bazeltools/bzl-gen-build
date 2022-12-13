@@ -479,8 +479,6 @@ mod tests {
                 target_value: Some("com.foo.bar.Baz".to_string())
             })
         );
-
-
     }
     #[test]
     fn other_parsing() {

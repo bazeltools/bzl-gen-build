@@ -390,11 +390,10 @@ impl GraphState {
             Ok(())
         }
 
-
         let mut consumed_nodes = self.consumed_nodes.remove(&destination).unwrap_or_default();
         consumed_nodes.extend(src.into_iter().copied());
         for x in src.into_iter() {
-            if let Some(c) = self.consumed_nodes.remove(&x){
+            if let Some(c) = self.consumed_nodes.remove(&x) {
                 consumed_nodes.extend(c.into_iter());
             }
         }
