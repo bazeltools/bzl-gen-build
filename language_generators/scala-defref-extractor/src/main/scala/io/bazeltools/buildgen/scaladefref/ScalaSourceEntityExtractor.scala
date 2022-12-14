@@ -602,8 +602,11 @@ object ScalaSourceEntityExtractor {
       case Type.With(left, right) =>
         log(s"Type.With($left, $right)")
         List(left, right).traverse_(inspect)
-      case Type.Placeholder(bounds) =>
-        log(s"Type.Placeholder($bounds)")
+      case Type.AnonymousParam(optVariant) =>
+        log(s"Type.AnonymousParam($optVariant)")
+        optVariant.traverse_(inspect)
+      case Type.Wildcard(bounds) =>
+        log(s"Type.Wildcard($bounds)")
         inspect(bounds)
       case Type.Singleton(n) =>
         // Foo.type
