@@ -15,8 +15,9 @@ import scala.meta.{
   Source,
   Term,
   Tree,
-  Pat
+  Pat,
 }
+import scala.meta.parsers.XtensionParseInputLike
 
 import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, DataBlock}
@@ -118,7 +119,7 @@ object ScalaSourceEntityExtractor {
     ): Iterator[A] =
       for {
         importStmt <- imports.iterator
-        Importer(ref, importees) <- importStmt.importers.iterator
+        case Importer(ref, importees) <- importStmt.importers.iterator
         entity = termToEntity(ref)
         imp <- importees.filter { i => fn.isDefinedAt((entity, i)) }
       } yield fn((entity, imp))
