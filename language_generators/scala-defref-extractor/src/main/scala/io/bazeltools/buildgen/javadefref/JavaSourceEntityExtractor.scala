@@ -168,7 +168,7 @@ object JavaSourceEntityExtractor {
           case an: AnnotationExpr =>
             names += an.getNameAsString()
           case compilationUnit: CompilationUnit =>
-            compilationUnit.getComments().asScala.foreach { c =>
+            compilationUnit.getAllComments().asScala.foreach { c =>
               Entity.findDirectives(c.getContent()) match {
                 case Right(ds) =>
                   allDirectives = allDirectives ++ ds
