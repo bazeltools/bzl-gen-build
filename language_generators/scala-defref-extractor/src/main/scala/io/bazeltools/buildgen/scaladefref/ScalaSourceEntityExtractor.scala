@@ -557,11 +557,17 @@ object ScalaSourceEntityExtractor {
         log(
           s"treeToNames:  Defn.Def(mods:$mods, name: $name, tparams: $tparams, paramss: $paramss, optType: $optType, body: $body)"
         )
-        optType.toList.map(typeToNames).flatten ++
-          paramss.flatMap(_.map(treeToNames)).flatten
+        List(
+          mods.toList.map(treeToNames),
+          optType.toList.map(typeToNames),
+          paramss.flatMap(_.map(treeToNames))
+        ).flatMap(_.flatten)
       case Term.Param(mods, name, optType, optTerm) =>
         log(s"treeToNames: Term.Param($mods, $name, $optType, $optTerm)")
-        optType.toList.map(typeToNames).flatten
+        List(
+          mods.toList.map(treeToNames),
+          optType.toList.map(typeToNames)
+        ).flatMap(_.flatten)
       case Init(tpe, name, terms) =>
         log(s"Init($tpe, $name, $terms)")
         typeToNames(tpe)
@@ -570,9 +576,18 @@ object ScalaSourceEntityExtractor {
         log(
           s"treeToNames: Val(mods: $mods, pats: $pats, optType: $optType, term: $term)"
         )
-        optType.toList.flatMap(typeToNames)
-      case _ => Nil
-
+        List(
+          mods.toList.map(treeToNames),
+          optType.toList.map(typeToNames)
+        ).flatMap(_.flatten)
+      case m: Mod =>
+        m match {
+          case Mod.Annot(init) =>
+            log(s"treeToNames: Mod.Annot($init)")
+            treeToNames(init)
+          case _ => Nil
+        }
+      // case _ => Nil
       // case t =>
       // sys.error(s"unknown: ${t.getClass} $t")
     }
@@ -894,6 +909,7 @@ object ScalaSourceEntityExtractor {
       case Defn.Val(mods, pats, optType, term) =>
         log(s"Val($mods, $pats, $optType, $term)")
         List(
+          mods.traverse_(inspect),
           pats.traverse_(definePat),
           optType.traverse_(inspect),
           inspect(term)
@@ -965,34 +981,48 @@ object ScalaSourceEntityExtractor {
         m match {
           case Mod.Annot(init) =>
             log(s"Mod.Annot($init)")
+            inspect(init)
           case Mod.Sealed() =>
             log("sealed")
+            unitEnv
           case Mod.Private(k) =>
             log(s"Private($k)")
+            unitEnv
           case Mod.Protected(k) =>
             log(s"Protected($k)")
+            unitEnv
           case Mod.Abstract() =>
             log("abstract")
+            unitEnv
           case Mod.Lazy() =>
             log("lazy")
+            unitEnv
           case Mod.Case() =>
             log("case")
+            unitEnv
           case Mod.Covariant() =>
             log("covariant")
+            unitEnv
           case Mod.Contravariant() =>
             log("contravariant")
+            unitEnv
           case Mod.Final() =>
             log("final")
+            unitEnv
           case Mod.Implicit() =>
             log("implicit")
+            unitEnv
           case Mod.Override() =>
             log("override")
+            unitEnv
           case Mod.ValParam() =>
             log("val param")
+            unitEnv
           case Mod.VarParam() =>
             log("var param")
+            unitEnv
         }
-        unitEnv
+
       case Ctor.Primary(mods, name, paramss) =>
         log(s"Ctor.Primary($mods, $name, $paramss)")
         // TODO do we need to process the name?

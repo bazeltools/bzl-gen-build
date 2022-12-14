@@ -566,6 +566,7 @@ object syntax
 package com.example
 
 object MyObject {
+    @Option(foo,bar,baz)
     val foo: Data[TypeA, TypeB[TypeC]] = "asdf"
 }
 
@@ -584,7 +585,13 @@ object MyObject {
         Entity.dotted("com.example.Data"),
         Entity.dotted("com.example.TypeA"),
         Entity.dotted("com.example.TypeB"),
-        Entity.dotted("com.example.TypeC")
+        Entity.dotted("com.example.TypeC"),
+        Entity.dotted("com.example.Option"),
+        Entity.dotted("Option"),
+        Entity.dotted("com.example.bar"),
+        Entity.dotted("bar"),
+        Entity.dotted("baz"),
+        Entity.dotted("com.example.baz")
       ),
       SortedSet(
         "link: com.example.MyObject -> Data",
@@ -594,7 +601,9 @@ object MyObject {
         "link: com.example.MyObject -> com.example.Data",
         "link: com.example.MyObject -> com.example.TypeA",
         "link: com.example.MyObject -> com.example.TypeB",
-        "link: com.example.MyObject -> com.example.TypeC"
+        "link: com.example.MyObject -> com.example.TypeC",
+        "link: com.example.MyObject -> Option",
+        "link: com.example.MyObject -> com.example.Option"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
