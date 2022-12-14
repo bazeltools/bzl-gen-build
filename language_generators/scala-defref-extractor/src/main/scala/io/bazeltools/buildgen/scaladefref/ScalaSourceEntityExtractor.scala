@@ -516,11 +516,16 @@ object ScalaSourceEntityExtractor {
       val stringRefs = refs.map(_.toString)
       val links = getLinksRecursive(s, Nil).iterator
         .flatMap { case (src, dests) =>
-          dests.iterator
-            .map(_.toString)
-            .iterator
+          dests.iterator.iterator
+            .map(_.value)
             .flatMap { e =>
-              stringRefs.iterator.filter { y => y.endsWith(e) }
+              val data = e.split('.').toList
+              val h :: tail = data
+              stringRefs.iterator.filter { y => y.endsWith(h) }.flatMap { e =>
+                e :: tail.map { t =>
+                  s"${e}.$t"
+                }
+              }
             }
             .map { linkTarget =>
               s"link: ${src} -> $linkTarget"
@@ -557,7 +562,11 @@ object ScalaSourceEntityExtractor {
       case Term.Param(mods, name, optType, optTerm) =>
         log(s"treeToNames: Term.Param($mods, $name, $optType, $optTerm)")
         optType.toList.map(typeToNames).flatten
+      case Init(tpe, name, terms) =>
+        log(s"Init($tpe, $name, $terms)")
+        typeToNames(tpe)
       case _ => Nil
+
       // case t =>
       // sys.error(s"unknown: ${t.getClass} $t")
     }
@@ -570,10 +579,11 @@ object ScalaSourceEntityExtractor {
       case Type.Apply(left, args) =>
         log(s"typeToNames: Type.Apply($left, $args)")
         (left :: args).traverse(typeToNames).flatten
-      // sys.error(s"unknown: ${tpe.getClass} $tpe")
+      case s @ Type.Select(_, _) =>
+        List(Name(s.toString))
       case _ => Nil
       // case t =>
-      //   sys.error(s"unknown: ${t.getClass} $t")
+      // sys.error(s"unknown: ${t.getClass} $t")
     }
   }
 
@@ -837,9 +847,12 @@ object ScalaSourceEntityExtractor {
         log(s"Name($n)")
         if (n.nonEmpty) referTo(nm)
         else unitEnv
-      case Pkg.Object(mods, name, template) =>
+      case Pkg.Object(mods, name, template @ Template(_, init, _, stats)) =>
         log(s"package object: mods = $mods, name = $name, template = $template")
-        define(name) *> inside(name, inspect(template))
+        link(
+          name,
+          init.map(_.tpe).flatMap(typeToNames) ++ stats.flatMap(treeToNames)
+        ) *> inside(name, inspect(template))
       case Template(early, init, self, stats) =>
         log(
           s"Template(early = $early, init = $init, self = $self, stats = $stats)"
@@ -865,12 +878,12 @@ object ScalaSourceEntityExtractor {
               .traverse_(inspect) *> stats.traverse_(inspect(_))
           }
         )
-      case Defn.Object(mods, name, templ @ Template(_, init, _, _)) =>
+      case Defn.Object(mods, name, templ @ Template(_, init, _, stats)) =>
         log(s"Object($mods, $name, $templ)")
 
         define(name) *> link(
           name,
-          init.map(_.tpe).flatMap(typeToNames)
+          init.flatMap(treeToNames) ++ stats.flatMap(treeToNames)
         ) *> inside(name, inspect(templ))
       case Defn.Val(mods, pats, optType, term) =>
         log(s"Val($mods, $pats, $optType, $term)")
@@ -905,10 +918,13 @@ object ScalaSourceEntityExtractor {
             name,
             tparams,
             ctor,
-            templ @ Template(_, init, _, _)
+            templ @ Template(_, init, _, stats)
           ) =>
         log(s"Defn.Trait($mods, $name, $tparams, $ctor, $templ)")
-        define(name) *> link(name, init.map(_.tpe).flatMap(typeToNames)) *>
+        define(name) *> link(
+          name,
+          init.map(_.tpe).flatMap(typeToNames) ++ stats.flatMap(treeToNames)
+        ) *>
           inside(
             name, {
               tparams.traverse_ { t =>

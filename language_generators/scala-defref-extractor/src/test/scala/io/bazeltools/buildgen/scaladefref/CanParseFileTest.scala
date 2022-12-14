@@ -32,8 +32,10 @@ class CanParseFileTest extends AnyFunSuite {
   test("can extract a strange syntax") {
     val simpleContent = """
     package com.foo.bar
+    import com.example.Wolf
+    import com.example.Elephant
 
-    case class Cat(foo: String) {
+    case class Cat(foo: String) extends Wolf with Elephant {
         val expressionName = Dog()
         // This format means we will throw a match error if Lizard != Dog with match
         val (`expressionName`, pie) = (Lizard(), 33)
@@ -54,9 +56,22 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("String"),
         Entity.dotted("com.foo.bar.Dog"),
         Entity.dotted("com.foo.bar.Lizard"),
-        Entity.dotted("com.foo.bar.String")
+        Entity.dotted("com.foo.bar.String"),
+        Entity.dotted("com"),
+        Entity.dotted("com.example"),
+        Entity.dotted("com.example.Elephant"),
+        Entity.dotted("com.example.Wolf"),
+        Entity.dotted("com.foo.bar.com"),
+        Entity.dotted("com.foo.bar.com.example"),
+        Entity.dotted("com.foo.bar.com.example.Elephant"),
+        Entity.dotted("com.foo.bar.com.example.Wolf")
       ),
-      SortedSet()
+      SortedSet(
+        "link: com.foo.bar.Cat -> com.example.Elephant",
+        "link: com.foo.bar.Cat -> com.example.Wolf",
+        "link: com.foo.bar.Cat -> com.foo.bar.com.example.Elephant",
+        "link: com.foo.bar.Cat -> com.foo.bar.com.example.Wolf"
+      )
     )
     assertParse(simpleContent, expectedDataBlock)
   }
@@ -110,7 +125,10 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("genSparseTensorOf"),
         Entity.dotted("println")
       ),
-      SortedSet()
+      SortedSet(
+        "link: com.foo.bar.TestObj -> TensorDataType",
+        "link: com.foo.bar.TestObj -> com.foo.bar.TensorDataType"
+      )
     )
     assertParse(simpleContent, expectedDataBlock)
   }
@@ -154,7 +172,10 @@ trait TestTrait {
         Entity.dotted("param"),
         Entity.dotted("value")
       ),
-      SortedSet()
+      SortedSet(
+        "link: com.foo.bar.TestTrait -> Long",
+        "link: com.foo.bar.TestTrait -> com.foo.bar.Long"
+      )
     )
 
     assertParse(simpleContent, expectedDataBlock)
@@ -460,6 +481,81 @@ case class BaseNode() {
         "link: com.example.BaseNode -> com.example.com.animal.dogs.retriever.Bar",
         "link: com.example.BaseNode -> com.animal.dogs.gamma.Square",
         "link: com.example.BaseNode -> com.example.com.animal.dogs.gamma.Square"
+      )
+    )
+    assertParse(simpleContent, expectedDataBlock)
+  }
+
+  test("Failing sample") {
+    val simpleContent = """
+package com.example
+
+object syntax
+    extends types.A.Ops
+    with types.B.Ops
+    with E.C.Ops
+    with E.G.Ops
+    with H.L.Ops
+    with P.Q.Ops
+"""
+    val expectedDataBlock = DataBlock(
+      "",
+      SortedSet(
+        Entity.dotted("com.example.syntax")
+      ),
+      SortedSet(
+        Entity.dotted("E"),
+        Entity.dotted("E.C"),
+        Entity.dotted("E.G"),
+        Entity.dotted("H"),
+        Entity.dotted("H.L"),
+        Entity.dotted("Ops"),
+        Entity.dotted("P"),
+        Entity.dotted("P.Q"),
+        Entity.dotted("com.example.E"),
+        Entity.dotted("com.example.E.C"),
+        Entity.dotted("com.example.E.G"),
+        Entity.dotted("com.example.H"),
+        Entity.dotted("com.example.H.L"),
+        Entity.dotted("com.example.Ops"),
+        Entity.dotted("com.example.P"),
+        Entity.dotted("com.example.P.Q"),
+        Entity.dotted("com.example.types"),
+        Entity.dotted("com.example.types.A"),
+        Entity.dotted("com.example.types.B"),
+        Entity.dotted("types"),
+        Entity.dotted("types.A"),
+        Entity.dotted("types.B")
+      ),
+      SortedSet(
+        "link: com.example.syntax -> E",
+        "link: com.example.syntax -> E.C",
+        "link: com.example.syntax -> E.G",
+        "link: com.example.syntax -> E.Ops",
+        "link: com.example.syntax -> H",
+        "link: com.example.syntax -> H.L",
+        "link: com.example.syntax -> H.Ops",
+        "link: com.example.syntax -> P",
+        "link: com.example.syntax -> P.Ops",
+        "link: com.example.syntax -> P.Q",
+        "link: com.example.syntax -> com.example.E",
+        "link: com.example.syntax -> com.example.E.C",
+        "link: com.example.syntax -> com.example.E.G",
+        "link: com.example.syntax -> com.example.E.Ops",
+        "link: com.example.syntax -> com.example.H",
+        "link: com.example.syntax -> com.example.H.L",
+        "link: com.example.syntax -> com.example.H.Ops",
+        "link: com.example.syntax -> com.example.P",
+        "link: com.example.syntax -> com.example.P.Ops",
+        "link: com.example.syntax -> com.example.P.Q",
+        "link: com.example.syntax -> com.example.types",
+        "link: com.example.syntax -> com.example.types.A",
+        "link: com.example.syntax -> com.example.types.B",
+        "link: com.example.syntax -> com.example.types.Ops",
+        "link: com.example.syntax -> types",
+        "link: com.example.syntax -> types.A",
+        "link: com.example.syntax -> types.B",
+        "link: com.example.syntax -> types.Ops"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
