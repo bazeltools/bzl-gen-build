@@ -75,7 +75,12 @@ async fn process_file(
                 e
             )
         })?;
-        r
+        use std::os::unix::ffi::OsStrExt;
+        Sha256Value::hash_iter_bytes(
+            vec![
+                r.as_bytes(),
+                relative_path.as_os_str().as_bytes()
+            ].into_iter())
     };
     let st = Instant::now();
 
