@@ -76,6 +76,8 @@ async fn process_file(
             )
         })?;
         use std::os::unix::ffi::OsStrExt;
+        // The outputs include the entity path/label information of the target
+        // so we need to include this in our sha we use to identify the file.
         Sha256Value::hash_iter_bytes(
             vec![
                 r.as_bytes(),
