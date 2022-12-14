@@ -88,7 +88,8 @@ class CanParseFileTest extends AnyFunSuite {
     val simpleContent = """
     package com.foo.bar
 
-    object TestObj {
+    import z.FooBarZ
+    object TestObj extends FooBarZ {
         def test(typ: TensorDataType) = forAll(genSparseTensorOf(typ)) {
         tensor =>
           val elementType = CustomObject.ElementType(typ)
@@ -131,7 +132,11 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("com.foo.bar.println"),
         Entity.dotted("forAll"),
         Entity.dotted("genSparseTensorOf"),
-        Entity.dotted("println")
+        Entity.dotted("println"),
+        Entity.dotted("com.foo.bar.z"),
+        Entity.dotted("com.foo.bar.z.FooBarZ"),
+        Entity.dotted("z"),
+        Entity.dotted("z.FooBarZ")
       ),
       SortedSet(
         "link: com.foo.bar.TestObj -> TensorDataType",
@@ -139,7 +144,9 @@ class CanParseFileTest extends AnyFunSuite {
         "link: com.foo.bar.TestObj -> com.foo.bar.forAll",
         "link: com.foo.bar.TestObj -> com.foo.bar.genSparseTensorOf",
         "link: com.foo.bar.TestObj -> forAll",
-        "link: com.foo.bar.TestObj -> genSparseTensorOf"
+        "link: com.foo.bar.TestObj -> genSparseTensorOf",
+        "link: com.foo.bar.TestObj -> com.foo.bar.z.FooBarZ",
+        "link: com.foo.bar.TestObj -> z.FooBarZ"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
