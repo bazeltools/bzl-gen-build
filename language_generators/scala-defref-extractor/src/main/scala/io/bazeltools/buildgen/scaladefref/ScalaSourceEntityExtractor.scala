@@ -181,6 +181,7 @@ object ScalaSourceEntityExtractor {
           .to(SortedSet)
 
       val directRefs = resolveNonLocals(refs)(_.value)
+
       val imps = resolveNonLocals(
         allUnresolvedImportEntities
           .flatMap(_.prefixes.toList)
@@ -267,16 +268,22 @@ object ScalaSourceEntityExtractor {
   def define(n: Name): Env[Unit] =
     updateState(_.addDef(n))
 
-  def link(n: Name, target: List[Name]): Env[Unit] = {
-    if (target.nonEmpty) {
-      updateState(_.addLink(n, NonEmptyList.fromListUnsafe(target)))
+  def link(n: Name, targets: List[List[Name]]): Env[Unit] = {
+    if (targets.nonEmpty) {
+      targets.traverse_ { t =>
+        if (t.nonEmpty) {
+          updateState(_.addLink(n, NonEmptyList.fromListUnsafe(t)))
+        } else {
+          updateState(identity)
+        }
+      }
     } else {
       State.empty
     }
   }
 
   def link(n: Name, target: Name): Env[Unit] =
-    link(n, target :: Nil)
+    link(n, List(target :: Nil))
 
   // val Foo(bar, baz) = ...
   // so we need to define all the names we hit
@@ -320,6 +327,31 @@ object ScalaSourceEntityExtractor {
       case Left(_)    => Monad[Env].unit
     }
 
+  def typeSelectToName(outerTerm: Term.Ref, n: Name): NonEmptyList[Name] = {
+    @annotation.tailrec
+    def loop(t: Term, acc: List[Name]): List[Name] = {
+      t match {
+        case n @ Term.Name(_)                    => n :: acc
+        case Term.Select(left, n @ Term.Name(_)) => loop(left, n :: acc)
+        case Term.Super(thisp, superp) =>
+          log(s"Term.Super(thisp: $thisp, superp: $superp)")
+          // This should be safe, since we should have a link onto our parent type already. And with a super reference we would need to resolve this
+          // onto figuring out our type/things we are inheriting from?
+          Nil
+        case _ =>
+          sys.error(
+            s"Un expected term : $t  (class: ${t.getClass.getName} )hit when trying to unroll outer term: $outerTerm"
+          )
+      }
+    }
+
+    NonEmptyList.fromListUnsafe(loop(outerTerm, Nil) ::: n :: Nil)
+  }
+
+  def referSelected(outerTerm: Term.Ref, n: Name): Env[Unit] = {
+    referTo(typeSelectToName(outerTerm, n))
+  }
+
   def scope[A](namePart: NamePart, env: Env[A]): Env[A] = {
     for {
       current <- State.get: Env[SS]
@@ -337,6 +369,7 @@ object ScalaSourceEntityExtractor {
     scope(NamePart.Defn(Entity.simple(t.value)), env)
 
   // we expect a select chain of names
+
   def termToNames(t: Term): Either[Term, NonEmptyList[Name]] = {
     @annotation.tailrec
     def loop(t: Term, acc: List[Name]): Either[Term, NonEmptyList[Name]] =
@@ -344,7 +377,8 @@ object ScalaSourceEntityExtractor {
         case n @ Term.Name(_) => Right(NonEmptyList(n, acc))
         case Term.Select(left, n @ Term.Name(_)) =>
           loop(left, n :: acc)
-        case other => Left(other)
+        case other =>
+          Left(other)
       }
 
     loop(t, Nil)
@@ -514,21 +548,30 @@ object ScalaSourceEntityExtractor {
       val defs = s.definedEntities
       val refs = s.nonLocalRefs(getResolve(s))
       val stringRefs = refs.map(_.toString)
+      val stringDefs = defs.map(_.toString)
       val links = getLinksRecursive(s, Nil).iterator
-        .flatMap { case (src, dests) =>
-          dests.iterator.iterator
-            .map(_.value)
-            .flatMap { e =>
-              val data = e.split('.').toList
-              val h :: tail = data
-              stringRefs.iterator.filter { y => y.endsWith(h) }.flatMap { e =>
-                e :: tail.map { t =>
-                  s"${e}.$t"
-                }
+        .flatMap { case (srcE, dests) =>
+          val src = srcE.toString
+          (s.unresolvedWildcards.iterator.map(_.toString) ++
+            dests.iterator.iterator
+              .map(_.value)
+              .flatMap { e =>
+                val data = e.split('.').toList
+                val h :: tail = data
+                (stringRefs.iterator ++ stringDefs.iterator)
+                  .filter { y => y.endsWith(h) }
+                  .flatMap { e =>
+                    e :: tail.map { t =>
+                      s"${e}.$t"
+                    }
+                  }
+              })
+            .flatMap { linkTarget =>
+              if (linkTarget == src) {
+                None
+              } else {
+                Some(s"link: ${src} -> $linkTarget")
               }
-            }
-            .map { linkTarget =>
-              s"link: ${src} -> $linkTarget"
             }
         }
         .to(SortedSet)
@@ -550,36 +593,60 @@ object ScalaSourceEntityExtractor {
     // println(s)
   }
 
-  def treeToNames(tpe: scala.meta.Tree): List[Name] = {
+  def treeToNames(tpe: List[scala.meta.Tree]): List[List[Name]] = {
+    tpe.map(treeToNames).flatten.filter(_.nonEmpty)
+  }
+
+  def treeToNames(tpe: Option[scala.meta.Tree]): List[List[Name]] = {
+    tpe match {
+      case None    => Nil
+      case Some(x) => treeToNames(x)
+    }
+  }
+
+  def treeToNames(tpe: scala.meta.Tree): List[List[Name]] = {
     import scala.meta._
     tpe match {
       case Defn.Def(mods, name, tparams, paramss, optType, body) =>
         log(
           s"treeToNames:  Defn.Def(mods:$mods, name: $name, tparams: $tparams, paramss: $paramss, optType: $optType, body: $body)"
         )
-        List(
-          mods.toList.map(treeToNames),
-          optType.toList.map(typeToNames),
-          paramss.flatMap(_.map(treeToNames))
-        ).flatMap(_.flatten)
+        val bodyTypes = if (optType.isEmpty) {
+          treeToNames(body)
+        } else {
+          Nil
+        }
+        treeToNames(mods) ::: treeToNames(optType) ::: treeToNames(
+          paramss.flatten
+        ) ::: bodyTypes
+
       case Term.Param(mods, name, optType, optTerm) =>
         log(s"treeToNames: Term.Param($mods, $name, $optType, $optTerm)")
-        List(
-          mods.toList.map(treeToNames),
-          optType.toList.map(typeToNames)
-        ).flatMap(_.flatten)
+        treeToNames(mods) ::: treeToNames(optType)
       case Init(tpe, name, terms) =>
         log(s"Init($tpe, $name, $terms)")
-        typeToNames(tpe)
-
+        treeToNames(tpe)
+      case Defn.Var(mods, pats, optType, term) =>
+        log(
+          s"treeToNames: Var(mods: $mods, pats: $pats, optType: $optType, term: $term)"
+        )
+        treeToNames(mods) ::: treeToNames(optType) ::: treeToNames(term)
       case Defn.Val(mods, pats, optType, term) =>
         log(
           s"treeToNames: Val(mods: $mods, pats: $pats, optType: $optType, term: $term)"
         )
-        List(
-          mods.toList.map(treeToNames),
-          optType.toList.map(typeToNames)
-        ).flatMap(_.flatten)
+        treeToNames(mods) ::: treeToNames(optType) ::: treeToNames(term)
+      case Lit.String(_) => Nil
+      case Lit.Int(_)    => Nil
+      case Term.Block(items) =>
+        log(s"treeToNames: Term.Block($items)")
+        treeToNames(items)
+      case Term.Name(n) =>
+        log(s"treeToNames: Term.Name($n)")
+        List(List(Name(n)))
+      case Term.Apply(term, termArgs) =>
+        log(s"treeToNames: Term.Apply($term, $termArgs)")
+        treeToNames(term :: termArgs)
       case m: Mod =>
         m match {
           case Mod.Annot(init) =>
@@ -587,21 +654,57 @@ object ScalaSourceEntityExtractor {
             treeToNames(init)
           case _ => Nil
         }
-      // case _ => Nil
-      // case t =>
-      // sys.error(s"unknown: ${t.getClass} $t")
-    }
-  }
-  def typeToNames(tpe: scala.meta.Type): List[Name] = {
-    import scala.meta._
-    tpe match {
       case tn @ Type.Name(_) =>
-        List(tn)
+        List(List(tn))
       case Type.Apply(left, args) =>
-        log(s"typeToNames: Type.Apply($left, $args)")
-        (left :: args).traverse(typeToNames).flatten
-      case s @ Type.Select(_, _) =>
-        List(Name(s.toString))
+        log(s"treeToNames: Type.Apply($left, $args)")
+        (left :: args).flatMap(treeToNames)
+      case Type.Select(t, n) =>
+        List(typeSelectToName(t, n).toList)
+      case Term.Select(n, a) =>
+        log(s"treeToNames: Term.Select(n: $n, a: $a)")
+        treeToNames(n)
+      case Term.ApplyType(tpe, tpeArgs) =>
+        treeToNames(tpe) ::: treeToNames(tpeArgs)
+      case Term.ApplyInfix(term, name, typeArgs, termArgs) =>
+        log(s"treeToNames: Term.ApplyInfix($term, $name, $typeArgs, $termArgs)")
+        treeToNames(term) :::
+          treeToNames(typeArgs) :::
+          treeToNames(termArgs)
+      case Type.Placeholder(bounds) =>
+        log(s"treeToNames: Type.Placeholder(bounds: $bounds)")
+        treeToNames(bounds)
+      case Type.Bounds(optLow, optHigh) =>
+        log(s"treeToNames: Type.Bounds(optLow: $optLow, optHigh: $optHigh)")
+        treeToNames(optLow) ::: treeToNames(optHigh)
+      case Type.With(left, right) =>
+        log(s"treeToNames: Type.With($left, $right)")
+        treeToNames(left) ::: treeToNames(right)
+      case Decl.Def(mods, name, tparams, paramss, decltpe) =>
+        treeToNames(mods) ::: treeToNames(name) ::: tparams.flatMap(
+          treeToNames
+        ) ::: paramss.flatMap(treeToNames) ::: treeToNames(decltpe)
+      case Term.Match(arg, cases) =>
+        treeToNames(arg) ::: treeToNames(cases)
+      case Case(pat, cond, body) =>
+        log(
+          s"treeToNames: Case(pat: $pat, cond: $cond, body: $body)"
+        )
+        treeToNames(pat) ::: treeToNames(cond) ::: treeToNames(body)
+      case Pat.Extract(term, args) =>
+        log(
+          s"treeToNames: Pat.Extract(term: $term, args: $args))"
+        )
+        treeToNames(term) ::: treeToNames(args)
+      case Term.Assign(_, right) =>
+        treeToNames(right)
+
+      case Ctor.Primary(mods, _, paramss) =>
+        treeToNames(mods) ::: paramss.flatMap(treeToNames)
+      case Term.Eta(term) =>
+        treeToNames(term)
+      case Term.New(init) =>
+        treeToNames(init)
       case _ => Nil
       // case t =>
       // sys.error(s"unknown: ${t.getClass} $t")
@@ -670,7 +773,7 @@ object ScalaSourceEntityExtractor {
       case Type.Select(left, item) =>
         // foo.Bar
         log(s"Type.Select($left, $item)")
-        List(left, item).traverse_(inspect)
+        referSelected(left, item) *> List(left, item).traverse_(inspect)
       case Type.Annotate(tpe, annots) =>
         log(s"Type.Annotate($tpe, $annots)")
         List(inspect(tpe), annots.traverse_(inspect)).sequence_
@@ -872,7 +975,7 @@ object ScalaSourceEntityExtractor {
         log(s"package object: mods = $mods, name = $name, template = $template")
         link(
           name,
-          init.map(_.tpe).flatMap(typeToNames) ++ stats.flatMap(treeToNames)
+          init.map(_.tpe).flatMap(treeToNames) ++ stats.flatMap(treeToNames)
         ) *> inside(name, inspect(template))
       case Template(early, init, self, stats) =>
         log(
@@ -892,7 +995,10 @@ object ScalaSourceEntityExtractor {
 
         define(name) *> link(
           name,
-          init.map(_.tpe).flatMap(typeToNames) ++ stats.flatMap(treeToNames)
+          init.map(_.tpe).flatMap(treeToNames) ++ stats.flatMap(
+            treeToNames
+          ) ++ treeToNames(ctor) ++ tparams.flatMap(treeToNames) ++ mods
+            .flatMap(treeToNames)
         ) *> inside(
           name, {
             (tparams ::: ctor :: template :: early ::: init ::: self :: Nil)
@@ -945,7 +1051,7 @@ object ScalaSourceEntityExtractor {
         log(s"Defn.Trait($mods, $name, $tparams, $ctor, $templ)")
         define(name) *> link(
           name,
-          init.map(_.tpe).flatMap(typeToNames) ++ stats.flatMap(treeToNames)
+          init.map(_.tpe).flatMap(treeToNames) ++ stats.flatMap(treeToNames)
         ) *>
           inside(
             name, {

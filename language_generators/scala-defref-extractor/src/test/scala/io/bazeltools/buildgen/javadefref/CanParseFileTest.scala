@@ -84,7 +84,81 @@ public interface ExampleIntegerEncoder {
         Entity.dotted("com.foo.zeb.Validate"),
         Entity.dotted("javax.annotation.Nullable")
       ),
-      bzl_gen_build_commands = SortedSet()
+      bzl_gen_build_commands = SortedSet(
+        "link: com.foo.bar.ExampleIntegerEncoder -> Animal",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Cat",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Dinosaur",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Dog",
+        "link: com.foo.bar.ExampleIntegerEncoder -> FeatureEncoderDef",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Funky",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Integer",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Nullable",
+        "link: com.foo.bar.ExampleIntegerEncoder -> Validate",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Animal",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Cat",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Dinosaur",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Dog",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.FeatureEncoderDef",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Funky",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Integer",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Nullable",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.bar.Validate",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.Animal",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.Cat",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.Dinosaur",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.Dog",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.FeatureEncoderDef",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.Funky",
+        "link: com.foo.bar.ExampleIntegerEncoder -> com.foo.zeb.Validate",
+        "link: com.foo.bar.ExampleIntegerEncoder -> javax.annotation.Nullable"
+      )
+    )
+    assertParse(simpleContent, expectedDataBlock)
+  }
+
+  test("Other usage forms") {
+    val simpleContent = """
+package com.foo.bar;
+import a.b.c.DataKey;
+import a.b.e.Kve;
+
+public final class Cat implements Serializable {
+    public static final TypeA V0 = null;
+
+    public Cat(final DataKey<Kve> v) {
+    }
+}
+"""
+
+    val expectedDataBlock = DataBlock(
+      "",
+      defs = SortedSet(
+        Entity.dotted("com.foo.bar.Cat")
+      ),
+      refs = SortedSet(
+        Entity.dotted("DataKey"),
+        Entity.dotted("Kve"),
+        Entity.dotted("Serializable"),
+        Entity.dotted("TypeA"),
+        Entity.dotted("a.b.c.DataKey"),
+        Entity.dotted("a.b.e.Kve"),
+        Entity.dotted("com.foo.bar.DataKey"),
+        Entity.dotted("com.foo.bar.Kve"),
+        Entity.dotted("com.foo.bar.Serializable"),
+        Entity.dotted("com.foo.bar.TypeA")
+      ),
+      bzl_gen_build_commands = SortedSet(
+        "link: com.foo.bar.Cat -> com.foo.bar.TypeA",
+        "link: com.foo.bar.Cat -> a.b.c.DataKey",
+        "link: com.foo.bar.Cat -> DataKey",
+        "link: com.foo.bar.Cat -> Kve",
+        "link: com.foo.bar.Cat -> Serializable",
+        "link: com.foo.bar.Cat -> TypeA",
+        "link: com.foo.bar.Cat -> a.b.e.Kve",
+        "link: com.foo.bar.Cat -> com.foo.bar.DataKey",
+        "link: com.foo.bar.Cat -> com.foo.bar.Kve",
+        "link: com.foo.bar.Cat -> com.foo.bar.Serializable"
+      )
     )
     assertParse(simpleContent, expectedDataBlock)
   }

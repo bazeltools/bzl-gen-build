@@ -62,36 +62,38 @@ object JavaSourceEntityExtractor {
     val generators: Set[String] =
       Set("InputTransformDef", "FeatureEncoderDef", "DataTransformDef")
 
-    val topLevelDefsTypes: SortedSet[Entity] =
+    val topLevelDefsTypes: List[(ast.Node, List[Entity])] =
       compUnit
         .getTypes()
         .iterator
         .asScala
-        .flatMap { t =>
-          t.getFullyQualifiedName().toScala.toList.flatMap { fqn =>
-            import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr
-            val anns = t.getAnnotations
-            val generated = anns.asScala.toList.flatMap {
-              case sc: SingleMemberAnnotationExpr
-                  if generators(sc.getName.asString) =>
-                // these drop the Def off the end and generate that type
-                val nonDef = if (fqn.endsWith("Def")) {
-                  fqn.dropRight(3)
-                } else {
-                  fqn
-                }
-                val res = Entity.dotted(nonDef) :: Nil
-                // System.err.println(s"generating: $res")
-                res
-              case _ =>
-                // System.err.println(s"ignored annotation: $other")
-                Nil
-            }
+        .toList
+        .map { t =>
+          val entities =
+            t.getFullyQualifiedName().toScala.toList.flatMap { fqn =>
+              import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr
+              val anns = t.getAnnotations
+              val generated = anns.asScala.toList.flatMap {
+                case sc: SingleMemberAnnotationExpr
+                    if generators(sc.getName.asString) =>
+                  // these drop the Def off the end and generate that type
+                  val nonDef = if (fqn.endsWith("Def")) {
+                    fqn.dropRight(3)
+                  } else {
+                    fqn
+                  }
+                  val res = Entity.dotted(nonDef) :: Nil
+                  // System.err.println(s"generating: $res")
+                  res
+                case _ =>
+                  // System.err.println(s"ignored annotation: $other")
+                  Nil
+              }
 
-            Entity.dotted(fqn) :: generated
-          }
+              Entity.dotted(fqn) :: generated
+            }
+          (t, entities)
         }
-        .to(SortedSet)
 
     val typeCache: MMap[JType, LazyList[Entity]] = MMap()
 
@@ -114,6 +116,7 @@ object JavaSourceEntityExtractor {
               .flatMap(jtypeToEntities(_))
         } else if (jt.isClassOrInterfaceType()) {
           val classType = jt.asClassOrInterfaceType();
+
           Entity.dotted(classType.getNameWithScope()) #::
             classType.getTypeArguments.toScala
               .to(LazyList)
@@ -126,13 +129,15 @@ object JavaSourceEntityExtractor {
             .asScala
             .to(LazyList)
             .flatMap(jtypeToEntities(_))
-        } else LazyList.empty
+        } else {
+          LazyList.empty
+        }
       )
 
     var allDirectives: Chain[String] =
       Chain.empty
 
-    val (referencedTypes: Set[JType], refNames: Set[String]) = {
+    def extractReferencedInfo(root: ast.Node): (Set[JType], Set[String]) = {
       import ast.Node
       import ast.nodeTypes.NodeWithType
       import ast.body.{ClassOrInterfaceDeclaration, MethodDeclaration}
@@ -212,11 +217,13 @@ object JavaSourceEntityExtractor {
 
       }
 
-      compUnit.walk(process(_))
+      root.walk(process(_))
 
       (refTypes.to(Set), names.to(Set))
     }
 
+    val (referencedTypes: Set[JType], refNames: Set[String]) =
+      extractReferencedInfo(compUnit)
     /*
      * These are all the possible "root" references.
      * for names like Foo, they could be:
@@ -242,11 +249,35 @@ object JavaSourceEntityExtractor {
         }
       }
 
+    val extraCommands = topLevelDefsTypes.flatMap {
+      case (topLvlNode, entities) =>
+        val (referencedTypes: Set[JType], refNames: Set[String]) =
+          extractReferencedInfo(topLvlNode)
+        val allRefs =
+          referencedTypes.to(LazyList).flatMap(jtypeToEntities(_)) #:::
+            refNames.to(LazyList).map(Entity.dotted(_))
+        val expandedRefs = allRefs.flatMap(expand).toList ++
+          rootRefs.flatMap { ref =>
+            val refStr = ref.toString
+            fixedImp.filter(_.toString.endsWith(refStr))
+          }
+
+        entities.flatMap { entity =>
+          expandedRefs.map { e =>
+            s"link: $entity -> $e"
+          }
+        }
+    }
+
+    val topLevelEntities = topLevelDefsTypes.flatMap(_._2).to(SortedSet)
+
     val refs =
       (rootRefs.flatMap(expand) #::: fixedImp #::: wildImp).to(SortedSet)
 
-    allDirectives.foldLeft(DataBlock("", topLevelDefsTypes, refs)) {
-      case (prev, n) => prev.addBzlBuildGenCommand(n)
+    (allDirectives.iterator ++ extraCommands.iterator).foldLeft(
+      DataBlock("", topLevelEntities, refs)
+    ) { case (prev, n) =>
+      prev.addBzlBuildGenCommand(n)
     }
   }
 
