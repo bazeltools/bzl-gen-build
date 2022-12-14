@@ -10,7 +10,6 @@ import io.circe.Encoder
 import java.nio.file.Files
 import java.nio.charset.StandardCharsets
 import io.circe.syntax.EncoderOps
-import java.nio.file.Paths
 
 abstract class DriverApplication extends IOApp {
   def name: String
@@ -23,7 +22,7 @@ abstract class DriverApplication extends IOApp {
 
   def writeJson[A: Encoder](path: Path, value: => A): IO[Unit] =
     IO.blocking {
-      Files.write(
+      val _ = Files.write(
         path,
         value.asJson.noSpacesSortKeys.getBytes(StandardCharsets.UTF_8)
       )
