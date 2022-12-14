@@ -549,7 +549,7 @@ object ScalaSourceEntityExtractor {
       case Type.Select(left, item) =>
         // foo.Bar
         log(s"Type.Select($left, $item)")
-        List(left, item).traverse_(inspect)
+        referSelected(left, item) *> List(left, item).traverse_(inspect)
       case Type.Annotate(tpe, annots) =>
         log(s"Type.Annotate($tpe, $annots)")
         List(inspect(tpe), annots.traverse_(inspect)).sequence_
@@ -778,6 +778,7 @@ object ScalaSourceEntityExtractor {
       case Defn.Val(mods, pats, optType, term) =>
         log(s"Val($mods, $pats, $optType, $term)")
         List(
+          mods.traverse_(inspect),
           pats.traverse_(definePat),
           optType.traverse_(inspect),
           inspect(term)
@@ -840,34 +841,48 @@ object ScalaSourceEntityExtractor {
         m match {
           case Mod.Annot(init) =>
             log(s"Mod.Annot($init)")
+            inspect(init)
           case Mod.Sealed() =>
             log("sealed")
+            unitEnv
           case Mod.Private(k) =>
             log(s"Private($k)")
+            unitEnv
           case Mod.Protected(k) =>
             log(s"Protected($k)")
+            unitEnv
           case Mod.Abstract() =>
             log("abstract")
+            unitEnv
           case Mod.Lazy() =>
             log("lazy")
+            unitEnv
           case Mod.Case() =>
             log("case")
+            unitEnv
           case Mod.Covariant() =>
             log("covariant")
+            unitEnv
           case Mod.Contravariant() =>
             log("contravariant")
+            unitEnv
           case Mod.Final() =>
             log("final")
+            unitEnv
           case Mod.Implicit() =>
             log("implicit")
+            unitEnv
           case Mod.Override() =>
             log("override")
+            unitEnv
           case Mod.ValParam() =>
             log("val param")
+            unitEnv
           case Mod.VarParam() =>
             log("var param")
+            unitEnv
         }
-        unitEnv
+
       case Ctor.Primary(mods, name, paramss) =>
         log(s"Ctor.Primary($mods, $name, $paramss)")
         // TODO do we need to process the name?
