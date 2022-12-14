@@ -290,6 +290,31 @@ object ScalaSourceEntityExtractor {
       case Left(_)    => Monad[Env].unit
     }
 
+  def typeSelectToName(outerTerm: Term.Ref, n: Name): NonEmptyList[Name] = {
+    @annotation.tailrec
+    def loop(t: Term, acc: List[Name]): List[Name] = {
+      t match {
+        case n @ Term.Name(_)                    => n :: acc
+        case Term.Select(left, n @ Term.Name(_)) => loop(left, n :: acc)
+        case Term.Super(thisp, superp) =>
+          log(s"Term.Super(thisp: $thisp, superp: $superp)")
+          // This should be safe, since we should have a link onto our parent type already. And with a super reference we would need to resolve this
+          // onto figuring out our type/things we are inheriting from?
+          Nil
+        case _ =>
+          sys.error(
+            s"Un expected term : $t  (class: ${t.getClass.getName} )hit when trying to unroll outer term: $outerTerm"
+          )
+      }
+    }
+
+    NonEmptyList.fromListUnsafe(loop(outerTerm, Nil) ::: n :: Nil)
+  }
+
+  def referSelected(outerTerm: Term.Ref, n: Name): Env[Unit] = {
+    referTo(typeSelectToName(outerTerm, n))
+  }
+
   def scope[A](namePart: NamePart, env: Env[A]): Env[A] = {
     for {
       current <- State.get: Env[SS]
