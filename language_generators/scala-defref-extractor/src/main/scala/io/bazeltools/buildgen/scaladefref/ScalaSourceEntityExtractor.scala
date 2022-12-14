@@ -15,7 +15,7 @@ import scala.meta.{
   Source,
   Term,
   Tree,
-  Pat,
+  Pat
 }
 import scala.meta.parsers.XtensionParseInputLike
 
@@ -290,6 +290,10 @@ object ScalaSourceEntityExtractor {
       case Left(_)    => Monad[Env].unit
     }
 
+  def log(s: String): Unit = {
+    require(s ne null)
+  }
+
   def typeSelectToName(outerTerm: Term.Ref, n: Name): NonEmptyList[Name] = {
     @annotation.tailrec
     def loop(t: Term, acc: List[Name]): List[Name] = {
@@ -514,10 +518,6 @@ object ScalaSourceEntityExtractor {
     */
   def inspect(tree: Tree): Env[Unit] = {
     import scala.meta._
-
-    def log(s: String): Unit = {
-      require(s ne null)
-    }
 
     tree match {
       case Case(pat, cond, body) =>
