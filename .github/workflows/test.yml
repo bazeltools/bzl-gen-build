@@ -15,13 +15,11 @@ jobs:
             platform: linux
     steps:
       - uses: actions/checkout@v2
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v1
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
       - run: rustup component add rustfmt
       - run: cd crates; cargo test --all-features
       - run: cd crates; cargo test
+      - run: cd language_generators/scala-defref-extractor; ./sbt test
+      - run: ./prepare_all_apps.sh
