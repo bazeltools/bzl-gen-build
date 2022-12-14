@@ -561,4 +561,42 @@ object syntax
     assertParse(simpleContent, expectedDataBlock)
   }
 
+  test("object value") {
+    val simpleContent = """
+package com.example
+
+object MyObject {
+    val foo: Data[TypeA, TypeB[TypeC]] = "asdf"
+}
+
+"""
+    val expectedDataBlock = DataBlock(
+      "",
+      SortedSet(
+        Entity.dotted("com.example.MyObject"),
+        Entity.dotted("com.example.MyObject.foo")
+      ),
+      SortedSet(
+        Entity.dotted("Data"),
+        Entity.dotted("TypeA"),
+        Entity.dotted("TypeB"),
+        Entity.dotted("TypeC"),
+        Entity.dotted("com.example.Data"),
+        Entity.dotted("com.example.TypeA"),
+        Entity.dotted("com.example.TypeB"),
+        Entity.dotted("com.example.TypeC")
+      ),
+      SortedSet(
+        "link: com.example.MyObject -> Data",
+        "link: com.example.MyObject -> TypeA",
+        "link: com.example.MyObject -> TypeB",
+        "link: com.example.MyObject -> TypeC",
+        "link: com.example.MyObject -> com.example.Data",
+        "link: com.example.MyObject -> com.example.TypeA",
+        "link: com.example.MyObject -> com.example.TypeB",
+        "link: com.example.MyObject -> com.example.TypeC"
+      )
+    )
+    assertParse(simpleContent, expectedDataBlock)
+  }
 }

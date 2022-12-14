@@ -565,6 +565,12 @@ object ScalaSourceEntityExtractor {
       case Init(tpe, name, terms) =>
         log(s"Init($tpe, $name, $terms)")
         typeToNames(tpe)
+
+      case Defn.Val(mods, pats, optType, term) =>
+        log(
+          s"treeToNames: Val(mods: $mods, pats: $pats, optType: $optType, term: $term)"
+        )
+        optType.toList.flatMap(typeToNames)
       case _ => Nil
 
       // case t =>
