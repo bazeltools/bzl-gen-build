@@ -25,9 +25,6 @@ class CanParseFileTest extends AnyFunSuite {
       refs =
         SortedSet(Entity.dotted("String"), Entity.dotted("com.foo.bar.String")),
       bzl_gen_build_commands = SortedSet(
-        "link: com.foo.bar.Cat -> com.foo.bar.String",
-        "link: com.foo.bar.Cat -> String",
-        "link: com.foo.bar.Cat -> com.foo.bar.String"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -71,14 +68,6 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("com.foo.bar.com.example.Wolf")
       ),
       SortedSet(
-        "link: com.foo.bar.Cat -> com.example.Elephant",
-        "link: com.foo.bar.Cat -> com.example.Wolf",
-        "link: com.foo.bar.Cat -> com.foo.bar.com.example.Elephant",
-        "link: com.foo.bar.Cat -> com.foo.bar.com.example.Wolf",
-        "link: com.foo.bar.Cat -> Dog",
-        "link: com.foo.bar.Cat -> com.foo.bar.Dog",
-        "link: com.foo.bar.Cat -> String",
-        "link: com.foo.bar.Cat -> com.foo.bar.String"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -139,14 +128,6 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("z.FooBarZ")
       ),
       SortedSet(
-        "link: com.foo.bar.TestObj -> TensorDataType",
-        "link: com.foo.bar.TestObj -> com.foo.bar.TensorDataType",
-        "link: com.foo.bar.TestObj -> com.foo.bar.forAll",
-        "link: com.foo.bar.TestObj -> com.foo.bar.genSparseTensorOf",
-        "link: com.foo.bar.TestObj -> forAll",
-        "link: com.foo.bar.TestObj -> genSparseTensorOf",
-        "link: com.foo.bar.TestObj -> com.foo.bar.z.FooBarZ",
-        "link: com.foo.bar.TestObj -> z.FooBarZ"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -242,31 +223,6 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.OtherSubClass")
       ),
       SortedSet(
-        "link: com.foo.bar.TestTrait -> Long",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.Long",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.z.GenA",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.z.GenB",
-        "link: com.foo.bar.TestTrait -> z.GenA",
-        "link: com.foo.bar.TestTrait -> z.GenB",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.Zeb",
-        "link: com.foo.bar.Zeb -> com.foo.bar.Zeb.np",
-        "link: com.foo.bar.Zeb -> com.foo.bar.z.NP",
-        "link: com.foo.bar.Zeb -> z.NP",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.org.apache.spark.sql.functions.udf",
-        "link: com.foo.bar.TestTrait -> org.apache.spark.sql.functions.udf",
-        "link: com.foo.bar.TestTrait -> Dependency",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.Dependency",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.TestTrait.foo",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.getCountryCode",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.z.OT",
-        "link: com.foo.bar.TestTrait -> getCountryCode",
-        "link: com.foo.bar.TestTrait -> z.OT",
-        "link: com.foo.bar.TestTrait -> OtherClass",
-        "link: com.foo.bar.TestTrait -> OtherClass.OtherSubClass",
-        "link: com.foo.bar.TestTrait -> OtherSubClass",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.OtherClass",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.OtherClass.OtherSubClass",
-        "link: com.foo.bar.TestTrait -> com.foo.bar.OtherSubClass"
       )
     )
 
@@ -292,10 +248,6 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.String")
       ),
       bzl_gen_build_commands = SortedSet(
-        "link: com.foo.bar.Cat -> Dog",
-        "link: com.foo.bar.Cat -> com.foo.bar.Dog",
-        "link: com.foo.bar.Cat -> String",
-        "link: com.foo.bar.Cat -> com.foo.bar.String"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -319,8 +271,6 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.Dog")
       ),
       bzl_gen_build_commands = SortedSet(
-        "link: com.foo.bar.Cat -> Dog",
-        "link: com.foo.bar.Cat -> com.foo.bar.Dog"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -347,14 +297,6 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.BaseType")
       ),
       SortedSet(
-        "link: com.foo.bar.AbstractC -> BaseTpeParamA",
-        "link: com.foo.bar.AbstractC -> BaseTpeParamB",
-        "link: com.foo.bar.AbstractC -> BaseTpeParamC",
-        "link: com.foo.bar.AbstractC -> BaseType",
-        "link: com.foo.bar.AbstractC -> com.foo.bar.BaseTpeParamA",
-        "link: com.foo.bar.AbstractC -> com.foo.bar.BaseTpeParamB",
-        "link: com.foo.bar.AbstractC -> com.foo.bar.BaseTpeParamC",
-        "link: com.foo.bar.AbstractC -> com.foo.bar.BaseType"
       )
     )
 
@@ -440,22 +382,6 @@ trait BaseNode
         Entity.dotted("com.example.com.animal.dogs.retriever")
       ),
       SortedSet(
-        "link: com.example.BaseNode -> CaseClassConfig",
-        "link: com.example.BaseNode -> Express",
-        "link: com.example.BaseNode -> JsonEncoder",
-        "link: com.example.BaseNode -> com.animal.cats.big.BaseTrainingNode",
-        "link: com.example.BaseNode -> com.animal.cats.tiger.TigerStripes",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.CaseClassConfig",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.Express",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.JsonEncoder",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.com.animal.cats.big.BaseTrainingNode",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.com.animal.cats.tiger.TigerStripes",
-        "link: com.example.BaseNode -> com.example.CaseClassConfig",
-        "link: com.example.BaseNode -> com.example.Express",
-        "link: com.example.BaseNode -> com.example.JsonEncoder",
-        "link: com.example.BaseNode -> com.example.com.animal.cats.big.BaseTrainingNode",
-        "link: com.example.BaseNode -> com.example.com.animal.cats.tiger.TigerStripes",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -540,22 +466,6 @@ object BaseNode
         Entity.dotted("com.example.com.animal.dogs.retriever")
       ),
       SortedSet(
-        "link: com.example.BaseNode -> CaseClassConfig",
-        "link: com.example.BaseNode -> Express",
-        "link: com.example.BaseNode -> JsonEncoder",
-        "link: com.example.BaseNode -> com.animal.cats.big.BaseTrainingNode",
-        "link: com.example.BaseNode -> com.animal.cats.tiger.TigerStripes",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.CaseClassConfig",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.Express",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.JsonEncoder",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.com.animal.cats.big.BaseTrainingNode",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.com.animal.cats.tiger.TigerStripes",
-        "link: com.example.BaseNode -> com.example.CaseClassConfig",
-        "link: com.example.BaseNode -> com.example.Express",
-        "link: com.example.BaseNode -> com.example.JsonEncoder",
-        "link: com.example.BaseNode -> com.example.com.animal.cats.big.BaseTrainingNode",
-        "link: com.example.BaseNode -> com.example.com.animal.cats.tiger.TigerStripes",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -671,48 +581,6 @@ case class BaseNode() {
         Entity.dotted("z.TypeL")
       ),
       SortedSet(
-        "link: com.example.BaseNode -> Option",
-        "link: com.example.BaseNode -> com.example.Option",
-        "link: com.example.BaseNode -> com.example.TypeB",
-        "link: com.example.BaseNode -> com.example.TypeC",
-        "link: com.example.BaseNode -> com.example.z.TypeA",
-        "link: com.example.BaseNode -> z.TypeA",
-        "link: com.example.BaseNode -> Data",
-        "link: com.example.BaseNode -> TypeB",
-        "link: com.example.BaseNode -> TypeC",
-        "link: com.example.BaseNode -> com.animal.dogs.gamma.Square",
-        "link: com.example.BaseNode -> com.animal.dogs.retriever.Bar",
-        "link: com.example.BaseNode -> com.example.Data",
-        "link: com.example.BaseNode -> com.example.com.animal.dogs.gamma.Square",
-        "link: com.example.BaseNode -> com.example.com.animal.dogs.retriever.Bar",
-        "link: com.example.BaseNode -> TypeE",
-        "link: com.example.BaseNode -> TypeF",
-        "link: com.example.BaseNode -> com.example.TypeE",
-        "link: com.example.BaseNode -> com.example.TypeF",
-        "link: com.example.BaseNode -> com.example.z.TypeG",
-        "link: com.example.BaseNode -> z.TypeG",
-        "link: com.example.BaseNode -> z.TypeH",
-        "link: com.example.BaseNode -> com.example.z.TypeH",
-        "link: com.example.BaseNode -> TRRF",
-        "link: com.example.BaseNode -> com.example.TRRF",
-        "link: com.example.BaseNode -> Encoder",
-        "link: com.example.BaseNode -> FeC",
-        "link: com.example.BaseNode -> Zed",
-        "link: com.example.BaseNode -> com.example.Encoder",
-        "link: com.example.BaseNode -> com.example.FeC",
-        "link: com.example.BaseNode -> com.example.Zed",
-        "link: com.example.BaseNode -> com.example.z.TypeJ",
-        "link: com.example.BaseNode -> z.TypeJ",
-        "link: com.example.BaseNode -> Some",
-        "link: com.example.BaseNode -> baz",
-        "link: com.example.BaseNode -> com.example.Some",
-        "link: com.example.BaseNode -> com.example.baz",
-        "link: com.example.BaseNode -> com.example.durationWindow",
-        "link: com.example.BaseNode -> com.example.z",
-        "link: com.example.BaseNode -> com.example.z.TypeL",
-        "link: com.example.BaseNode -> durationWindow",
-        "link: com.example.BaseNode -> z",
-        "link: com.example.BaseNode -> z.TypeL"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -772,40 +640,6 @@ object syntax
         Entity.dotted("types.B.Ops")
       ),
       SortedSet(
-        "link: com.example.syntax -> E",
-        "link: com.example.syntax -> E.C",
-        "link: com.example.syntax -> E.C.Ops",
-        "link: com.example.syntax -> E.G",
-        "link: com.example.syntax -> E.G.Ops",
-        "link: com.example.syntax -> H",
-        "link: com.example.syntax -> H.L",
-        "link: com.example.syntax -> H.L.Ops",
-        "link: com.example.syntax -> Ops",
-        "link: com.example.syntax -> P",
-        "link: com.example.syntax -> P.Q",
-        "link: com.example.syntax -> P.Q.Ops",
-        "link: com.example.syntax -> com.example.E",
-        "link: com.example.syntax -> com.example.E.C",
-        "link: com.example.syntax -> com.example.E.C.Ops",
-        "link: com.example.syntax -> com.example.E.G",
-        "link: com.example.syntax -> com.example.E.G.Ops",
-        "link: com.example.syntax -> com.example.H",
-        "link: com.example.syntax -> com.example.H.L",
-        "link: com.example.syntax -> com.example.H.L.Ops",
-        "link: com.example.syntax -> com.example.Ops",
-        "link: com.example.syntax -> com.example.P",
-        "link: com.example.syntax -> com.example.P.Q",
-        "link: com.example.syntax -> com.example.P.Q.Ops",
-        "link: com.example.syntax -> com.example.types",
-        "link: com.example.syntax -> com.example.types.A",
-        "link: com.example.syntax -> com.example.types.A.Ops",
-        "link: com.example.syntax -> com.example.types.B",
-        "link: com.example.syntax -> com.example.types.B.Ops",
-        "link: com.example.syntax -> types",
-        "link: com.example.syntax -> types.A",
-        "link: com.example.syntax -> types.A.Ops",
-        "link: com.example.syntax -> types.B",
-        "link: com.example.syntax -> types.B.Ops"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -847,16 +681,6 @@ object MyObject {
         Entity.dotted("z.TypeA")
       ),
       SortedSet(
-        "link: com.example.MyObject -> Data",
-        "link: com.example.MyObject -> TypeB",
-        "link: com.example.MyObject -> TypeC",
-        "link: com.example.MyObject -> com.example.Data",
-        "link: com.example.MyObject -> com.example.TypeB",
-        "link: com.example.MyObject -> com.example.TypeC",
-        "link: com.example.MyObject -> Option",
-        "link: com.example.MyObject -> com.example.Option",
-        "link: com.example.MyObject -> com.example.z.TypeA",
-        "link: com.example.MyObject -> z.TypeA"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -907,16 +731,6 @@ object MyObject {
         Entity.dotted("com.foo.bar.com.baz.buzz.Dope")
       ),
       bzl_gen_build_commands = SortedSet(
-        "link: com.foo.bar.Cat -> Long",
-        "link: com.foo.bar.Cat -> Nope",
-        "link: com.foo.bar.Cat -> com.baz.buzz.Dope",
-        "link: com.foo.bar.Cat -> com.baz.buzz.Dope.Long",
-        "link: com.foo.bar.Cat -> com.baz.buzz.Dope.Nope",
-        "link: com.foo.bar.Cat -> com.foo.bar.Long",
-        "link: com.foo.bar.Cat -> com.foo.bar.Nope",
-        "link: com.foo.bar.Cat -> String",
-        "link: com.foo.bar.Cat -> com.baz.buzz.Dope.String",
-        "link: com.foo.bar.Cat -> com.foo.bar.String"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -950,8 +764,6 @@ object MyObject {
         Entity.dotted("com.monovore.decline.Opts")
       ),
       bzl_gen_build_commands = SortedSet(
-        "link: com.foo.bar.App -> com.foo.bar.com.monovore.decline.Command",
-        "link: com.foo.bar.App -> com.monovore.decline.Command"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
@@ -998,10 +810,6 @@ object MyObject {
         Entity.dotted("com.foo.bar.String")
       ),
       bzl_gen_build_commands = SortedSet(
-        "link: com.foo.bar.App -> Unit",
-        "link: com.foo.bar.App -> com.foo.bar.Unit",
-        "link: com.foo.bar.App.Val -> String",
-        "link: com.foo.bar.App.Val -> com.foo.bar.String"
       )
     )
     assertParse(simpleContent, expectedDataBlock)
