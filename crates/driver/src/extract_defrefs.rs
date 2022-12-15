@@ -105,7 +105,7 @@ async fn process_file(
         command
             .arg("--working-directory")
             .arg(working_directory.as_path());
-        command.arg("--label-or-repo-path").arg(path.as_path());
+        command.arg("--label-or-repo-path").arg(relative_path.as_path());
         command.arg("--output").arg(target_path.as_path());
         command.kill_on_drop(true);
         let status = {
