@@ -49,7 +49,7 @@ pub struct Extractors(pub HashMap<String, Extractor>);
 #[derive(Debug, Clone)]
 pub struct Extractor {
     pub path: PathBuf,
-    pub extractor_sha: Sha256Value
+    pub extractor_sha: Sha256Value,
 }
 
 #[derive(Debug)]
@@ -86,8 +86,10 @@ async fn process_file(
             vec![
                 r.as_bytes(),
                 opt.extractor.extractor_sha.as_bytes(),
-                relative_path.as_os_str().as_bytes()
-            ].into_iter())
+                relative_path.as_os_str().as_bytes(),
+            ]
+            .into_iter(),
+        )
     };
     let st = Instant::now();
 
@@ -110,7 +112,12 @@ async fn process_file(
         command
             .arg("--working-directory")
             .arg(working_directory.as_path());
-        command.arg("--label-or-repo-path").arg(relative_path.as_path());
+        // This is the same as the relative input path above in this caller invokation
+        // but from other ways of outputting this data the two can diverge. For external dependencies
+        // this one contains the label, and the other is the only encoding of the path to the file.
+        command
+            .arg("--label-or-repo-path")
+            .arg(relative_path.as_path());
         command.arg("--output").arg(target_path.as_path());
         command.kill_on_drop(true);
         let status = {
@@ -437,7 +444,13 @@ async fn load_extractors(extract: &'static Extract) -> Result<Extractors> {
         }
 
         let extractor_sha = Sha256Value::from_path(&pb).await?;
-        r.insert(k.to_string(), Extractor { path: pb , extractor_sha});
+        r.insert(
+            k.to_string(),
+            Extractor {
+                path: pb,
+                extractor_sha,
+            },
+        );
     }
 
     Ok(Extractors(r))
