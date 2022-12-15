@@ -49,6 +49,7 @@ pub struct Extractors(pub HashMap<String, Extractor>);
 #[derive(Debug, Clone)]
 pub struct Extractor {
     pub path: PathBuf,
+    pub extractor_sha: Sha256Value
 }
 
 #[derive(Debug)]
@@ -76,11 +77,15 @@ async fn process_file(
             )
         })?;
         use std::os::unix::ffi::OsStrExt;
-        // The outputs include the entity path/label information of the target
+        // The input of the relative path is carried through into the output result
         // so we need to include this in our sha we use to identify the file.
+        //
+        // We also include the sha of the extractor itself
+        //
         Sha256Value::hash_iter_bytes(
             vec![
                 r.as_bytes(),
+                opt.extractor.extractor_sha.as_bytes(),
                 relative_path.as_os_str().as_bytes()
             ].into_iter())
     };
@@ -402,7 +407,7 @@ async fn run_extractors_on_data<'a>(
     Ok((results, (max_target, max_duration)))
 }
 
-fn load_extractors(extract: &'static Extract) -> Result<Extractors> {
+async fn load_extractors(extract: &'static Extract) -> Result<Extractors> {
     let mut r = HashMap::default();
     for combo in extract.extractor.iter() {
         let p: Vec<&str> = combo.split(':').collect();
@@ -431,7 +436,8 @@ fn load_extractors(extract: &'static Extract) -> Result<Extractors> {
             return Err(anyhow!("Passed in extractor pointed at somethnig that isn't a file, saw {:?} from {} which doesn't exist", pb, combo));
         }
 
-        r.insert(k.to_string(), Extractor { path: pb });
+        let extractor_sha = Sha256Value::from_path(&pb).await?;
+        r.insert(k.to_string(), Extractor { path: pb , extractor_sha});
     }
 
     Ok(Extractors(r))
@@ -447,7 +453,7 @@ pub async fn extract_defrefs(
     let sha_of_conf: Sha256Value = merged_config_str.as_bytes().into();
     let sha_of_conf_config = Arc::new(format!("{}", sha_of_conf));
 
-    let extractors = load_extractors(extract)?;
+    let extractors = load_extractors(extract).await?;
 
     let sha_to_extract_root = Box::leak(Box::new(opt.cache_path.join("sha_to_extract")));
     if !sha_to_extract_root.exists() {
