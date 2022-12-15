@@ -8,7 +8,7 @@ import cats.effect.unsafe.implicits.global
 class CanParseFileTest extends AnyFunSuite {
 
   def assertParse(str: String, expected: DataBlock) =
-    assert( JavaSourceEntityExtractor.extract(str).unsafeRunSync() === expected)
+    assert(JavaSourceEntityExtractor.extract(str).unsafeRunSync() === expected)
 
   test("can extract a simple file") {
     val simpleContent = """
@@ -19,10 +19,10 @@ class CanParseFileTest extends AnyFunSuite {
     }
     """
     val expectedDataBlock = DataBlock(
-         "",
-        defs = SortedSet(Entity.dotted("com.foo.bar.Cat")),
-        refs = SortedSet(),
-        bzl_gen_build_commands = SortedSet()
+      "",
+      defs = SortedSet(Entity.dotted("com.foo.bar.Cat")),
+      refs = SortedSet(),
+      bzl_gen_build_commands = SortedSet()
     )
     assertParse(simpleContent, expectedDataBlock)
   }
@@ -54,40 +54,39 @@ public interface ExampleIntegerEncoder {
 }
     """
     val expectedDataBlock = DataBlock(
-         "",
-        defs = SortedSet(Entity.dotted("com.foo.bar.ExampleIntegerEncoder")),
-        refs = SortedSet(
-            Entity.dotted("Animal"),
-             Entity.dotted("Cat"),
-             Entity.dotted("Dinosaur"),
-             Entity.dotted("Dog"),
-             Entity.dotted("FeatureEncoderDef"),
-             Entity.dotted("Funky"),
-             Entity.dotted("Integer"),
-             Entity.dotted("Nullable"),
-             Entity.dotted("Validate"),
-             Entity.dotted("com.foo.bar.Animal"),
-             Entity.dotted("com.foo.bar.Cat"),
-             Entity.dotted("com.foo.bar.Dinosaur"),
-             Entity.dotted("com.foo.bar.Dog"),
-             Entity.dotted("com.foo.bar.FeatureEncoderDef"),
-             Entity.dotted("com.foo.bar.Funky"),
-             Entity.dotted("com.foo.bar.Integer"),
-              Entity.dotted("com.foo.bar.Nullable"),
-              Entity.dotted("com.foo.bar.Validate"),
-              Entity.dotted("com.foo.zeb.Animal"),
-              Entity.dotted("com.foo.zeb.Cat"),
-              Entity.dotted("com.foo.zeb.Dinosaur"),
-              Entity.dotted("com.foo.zeb.Dog"),
-              Entity.dotted("com.foo.zeb.FeatureEncoderDef"),
-              Entity.dotted("com.foo.zeb.Funky"),
-              Entity.dotted("com.foo.zeb.Validate"),
-              Entity.dotted("javax.annotation.Nullable")
-        ),
-        bzl_gen_build_commands = SortedSet()
+      "",
+      defs = SortedSet(Entity.dotted("com.foo.bar.ExampleIntegerEncoder")),
+      refs = SortedSet(
+        Entity.dotted("Animal"),
+        Entity.dotted("Cat"),
+        Entity.dotted("Dinosaur"),
+        Entity.dotted("Dog"),
+        Entity.dotted("FeatureEncoderDef"),
+        Entity.dotted("Funky"),
+        Entity.dotted("Integer"),
+        Entity.dotted("Nullable"),
+        Entity.dotted("Validate"),
+        Entity.dotted("com.foo.bar.Animal"),
+        Entity.dotted("com.foo.bar.Cat"),
+        Entity.dotted("com.foo.bar.Dinosaur"),
+        Entity.dotted("com.foo.bar.Dog"),
+        Entity.dotted("com.foo.bar.FeatureEncoderDef"),
+        Entity.dotted("com.foo.bar.Funky"),
+        Entity.dotted("com.foo.bar.Integer"),
+        Entity.dotted("com.foo.bar.Nullable"),
+        Entity.dotted("com.foo.bar.Validate"),
+        Entity.dotted("com.foo.zeb.Animal"),
+        Entity.dotted("com.foo.zeb.Cat"),
+        Entity.dotted("com.foo.zeb.Dinosaur"),
+        Entity.dotted("com.foo.zeb.Dog"),
+        Entity.dotted("com.foo.zeb.FeatureEncoderDef"),
+        Entity.dotted("com.foo.zeb.Funky"),
+        Entity.dotted("com.foo.zeb.Validate"),
+        Entity.dotted("javax.annotation.Nullable")
+      ),
+      bzl_gen_build_commands = SortedSet()
     )
     assertParse(simpleContent, expectedDataBlock)
   }
-
 
 }
