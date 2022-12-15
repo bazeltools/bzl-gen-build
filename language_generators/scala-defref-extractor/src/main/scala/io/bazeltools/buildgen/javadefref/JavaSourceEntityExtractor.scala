@@ -69,8 +69,43 @@ object JavaSourceEntityExtractor {
         .asScala
         .flatMap { t =>
           t.getFullyQualifiedName().toScala.toList.flatMap { fqn =>
-            import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr
+            import com.github.javaparser.ast.expr.{
+              SingleMemberAnnotationExpr,
+              NormalAnnotationExpr,
+              StringLiteralExpr
+            }
             val anns = t.getAnnotations
+
+            val defaultDataKeys: List[String] = t
+              .getMembers()
+              .asScala
+              .toList
+              .collect {
+                case x: com.github.javaparser.ast.body.FieldDeclaration =>
+                  x.getAnnotations.asScala.toList.collect {
+                    case normalAnnotation: NormalAnnotationExpr
+                        if (normalAnnotation.getName.asString == "DefaultDataKey") => {
+                      normalAnnotation
+                        .getPairs()
+                        .asScala
+                        .toList
+                        .filter { pair =>
+                          pair.getName.asString() == "name"
+                        }
+                        .map(_.getValue())
+                        .collect { case s: StringLiteralExpr =>
+                          s.asString
+                        }
+                    }
+                  }.flatten
+              }
+              .flatten
+
+            val defaultDataKeyFQE = defaultDataKeys.flatMap { e =>
+              optPack.map { pack =>
+                pack / s"MixinDefault${e.capitalize}Key"
+              }
+            }
             val generated = anns.asScala.toList.flatMap {
               case sc: SingleMemberAnnotationExpr
                   if generators(sc.getName.asString) =>
@@ -86,7 +121,7 @@ object JavaSourceEntityExtractor {
               case _ =>
                 // System.err.println(s"ignored annotation: $other")
                 Nil
-            }
+            } ++ defaultDataKeyFQE
 
             Entity.dotted(fqn) :: generated
           }
