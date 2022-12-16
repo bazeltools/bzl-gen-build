@@ -9,7 +9,6 @@ class EntityTests extends munit.ScalaCheckSuite {
       idents <- Gen.listOfN(cnt, Gen.identifier)
     } yield Entity(idents.toVector)
 
-
   property("Entity Ordering is lawful") {
     OrderingLaws.orderingLaws(genEntity)
   }

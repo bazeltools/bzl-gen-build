@@ -9,20 +9,29 @@ class PathTreeTests extends munit.ScalaCheckSuite {
 
   property("empty has nothing") {
     forAll { (ks: List[Byte]) =>
-      assertEquals(PathTree.empty[Byte].pathGet(ks).toList,
-        List.fill(ks.length + 1)(None))
+      assertEquals(
+        PathTree.empty[Byte].pathGet(ks).toList,
+        List.fill(ks.length + 1)(None)
+      )
     }
   }
 
-  def genPathTree[K: Ordering, V](gk: Gen[K], gv: Gen[V]): Gen[PathTree[K, V]] = {
+  def genPathTree[K: Ordering, V](
+      gk: Gen[K],
+      gv: Gen[V]
+  ): Gen[PathTree[K, V]] = {
     val genKs = Gen.listOf(gk)
-    Gen.listOf(Gen.zip(genKs, Gen.option(gv)))
+    Gen
+      .listOf(Gen.zip(genKs, Gen.option(gv)))
       .map { kvs =>
-        kvs.foldLeft(PathTree.empty[K]: PathTree[K, V]) { case (t, (k, v)) => t.updated(k, v) }
+        kvs.foldLeft(PathTree.empty[K]: PathTree[K, V]) { case (t, (k, v)) =>
+          t.updated(k, v)
+        }
       }
-    }
+  }
 
-  implicit def arbTree[K: Ordering: Arbitrary, V: Arbitrary]: Arbitrary[PathTree[K, V]] =
+  implicit def arbTree[K: Ordering: Arbitrary, V: Arbitrary]
+      : Arbitrary[PathTree[K, V]] =
     Arbitrary(genPathTree[K, V](arbitrary[K], arbitrary[V]))
 
   test("empty.isEmpty") {
@@ -40,7 +49,9 @@ class PathTreeTests extends munit.ScalaCheckSuite {
     forAll { (tree: PathTree[Byte, Int], ks: List[Byte]) =>
       if (tree.isEmpty) assert(tree.getAt(ks).isEmpty)
       else {
-        val notEmpty = tree.keys.map { k => tree.getAt(k) }.collectFirst { case Some(v) => v }
+        val notEmpty = tree.keys.map { k => tree.getAt(k) }.collectFirst {
+          case Some(v) => v
+        }
         assert(notEmpty.nonEmpty)
       }
     }
@@ -54,9 +65,10 @@ class PathTreeTests extends munit.ScalaCheckSuite {
   }
 
   property("after updateSubTree, getSubTree returns it") {
-    forAll { (tree: PathTree[Byte, Int], ks: List[Byte], v: PathTree[Byte, Int]) =>
-      val pt0 = tree.updateSubTree(ks, v)
-      assertEquals(pt0.getSubTree(ks), v)
+    forAll {
+      (tree: PathTree[Byte, Int], ks: List[Byte], v: PathTree[Byte, Int]) =>
+        val pt0 = tree.updateSubTree(ks, v)
+        assertEquals(pt0.getSubTree(ks), v)
     }
   }
 
@@ -90,8 +102,7 @@ class PathTreeTests extends munit.ScalaCheckSuite {
     forAll { (tree: PathTree[Byte, Int], ks: List[Byte]) =>
       if (ks.isEmpty) {
         assertEquals(tree.mostSpecific(ks), tree.value)
-      }
-      else {
+      } else {
         val left = tree.mostSpecific(ks)
         val leftInit = tree.mostSpecific(ks.init)
         // either they are the same, or left is getAt(ks)
@@ -108,8 +119,7 @@ class PathTreeTests extends munit.ScalaCheckSuite {
       }
       if (ks.nonEmpty) {
         assertEquals(pt0.pathGet(ks).head, tree.value)
-      }
-      else  {
+      } else {
         assertEquals(pt0.pathGet(ks).head, v)
       }
     }
@@ -144,8 +154,9 @@ class PathTreeTests extends munit.ScalaCheckSuite {
 
   property("tree.keys.foldLeft(empty)(update) == tree") {
     forAll { (tree: PathTree[Byte, Int]) =>
-      val t1 = tree.keys.foldLeft(PathTree.empty[Byte]: PathTree[Byte, Int]) { (t0, key) =>
-        t0.updated(key, tree.getAt(key))
+      val t1 = tree.keys.foldLeft(PathTree.empty[Byte]: PathTree[Byte, Int]) {
+        (t0, key) =>
+          t0.updated(key, tree.getAt(key))
       }
       assertEquals(t1, tree)
     }
@@ -153,9 +164,11 @@ class PathTreeTests extends munit.ScalaCheckSuite {
 
   property("tree.toLazyList.fold(empty)(add) == tree") {
     forAll { (tree: PathTree[Byte, Int]) =>
-      val t1 = tree.toLazyList.foldLeft(PathTree.empty[Byte]: PathTree[Byte, Int]) { case (t0, (key, v)) =>
-        t0.updated(key, Some(v))
-      }
+      val t1 =
+        tree.toLazyList.foldLeft(PathTree.empty[Byte]: PathTree[Byte, Int]) {
+          case (t0, (key, v)) =>
+            t0.updated(key, Some(v))
+        }
       assertEquals(t1, tree)
     }
   }

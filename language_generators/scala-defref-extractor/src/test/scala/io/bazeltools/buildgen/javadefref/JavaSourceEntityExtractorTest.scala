@@ -37,10 +37,13 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
     """)
 
     val expected = DefsRefs(
-        defs = ents("""["foo.bar.Bar"]"""),
-        // TODO: if we call b.call inside a method we shouldn't see b as a dep
-        //refs = ents("""["b", "foo.bar.b", "foo.bar.Baz", "Baz", "foo.bar.Pop", "Pop", "Bippy", "foo.bar.Bippy", "some.Pack"]"""))
-        refs = ents("""["foo.bar.Baz", "Baz", "foo.bar.Pop", "Pop", "Bippy", "foo.bar.Bippy", "some.Pack"]"""))
+      defs = ents("""["foo.bar.Bar"]"""),
+      // TODO: if we call b.call inside a method we shouldn't see b as a dep
+      // refs = ents("""["b", "foo.bar.b", "foo.bar.Baz", "Baz", "foo.bar.Pop", "Pop", "Bippy", "foo.bar.Bippy", "some.Pack"]"""))
+      refs = ents(
+        """["foo.bar.Baz", "Baz", "foo.bar.Pop", "Pop", "Bippy", "foo.bar.Bippy", "some.Pack"]"""
+      )
+    )
 
     got.assertEquals(expected)
   }
@@ -63,7 +66,7 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
 
     got.assertEquals(expected)
   }
-  */
+   */
 
   test("static import") {
     val got = struct("""

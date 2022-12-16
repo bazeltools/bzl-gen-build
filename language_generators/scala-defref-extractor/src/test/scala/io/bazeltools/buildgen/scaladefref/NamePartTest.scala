@@ -10,10 +10,13 @@ class NamePartTests extends munit.ScalaCheckSuite {
   val genNonPackage: Gen[NamePart] =
     Gen.oneOf(
       Gen.const(NamePart.Anonymous),
-      Gen.identifier.map { nm => NamePart.Defn(Entity.simple(nm))})
+      Gen.identifier.map { nm => NamePart.Defn(Entity.simple(nm)) }
+    )
 
   val genPackage: Gen[NamePart.Package] =
-    Gen.choose(1, 5).flatMap(Gen.listOfN(_, Gen.identifier)).map { es => NamePart.Package(Entity(es.toVector)) }
+    Gen.choose(1, 5).flatMap(Gen.listOfN(_, Gen.identifier)).map { es =>
+      NamePart.Package(Entity(es.toVector))
+    }
 
   val genNamePart: Gen[NamePart] =
     Gen.oneOf(genNonPackage, genPackage)
@@ -21,7 +24,10 @@ class NamePartTests extends munit.ScalaCheckSuite {
   val genParts: Gen[Vector[NamePart]] = Gen.listOf(genNamePart).map(_.toVector)
 
   test("zero packages means top level") {
-    assertEquals(NamePart.referencePackages(Vector.empty), NonEmptyList(Entity.empty, Nil))
+    assertEquals(
+      NamePart.referencePackages(Vector.empty),
+      NonEmptyList(Entity.empty, Nil)
+    )
   }
 
   property("nested packages add linearly to the scopes") {
@@ -60,8 +66,10 @@ class NamePartTests extends munit.ScalaCheckSuite {
 
   property("anonymous or defn cuts off packages") {
     forAll(genParts, genNonPackage, genParts) { (first, nonPack, last) =>
-      assertEquals(NamePart.referencePackages(first :+ nonPack :++ last),
-        NamePart.referencePackages(first))
+      assertEquals(
+        NamePart.referencePackages(first :+ nonPack :++ last),
+        NamePart.referencePackages(first)
+      )
     }
   }
 }
