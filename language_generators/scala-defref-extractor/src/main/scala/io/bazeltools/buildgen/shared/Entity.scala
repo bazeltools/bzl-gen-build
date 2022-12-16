@@ -3,7 +3,7 @@ package io.bazeltools.buildgen.shared
 import cats.data.{Chain, NonEmptyList}
 import cats.Order
 import cats.parse.{Parser, Parser0}
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder}
 
 import cats.syntax.all._
 
@@ -39,6 +39,9 @@ final case class Entity(parts: Vector[String]) {
 object Entity {
   implicit val entityEncoder: Encoder[Entity] =
     Encoder.encodeString.contramap(_.asString)
+
+  implicit val entityDecoder: Decoder[Entity] =
+    Decoder.decodeString.map(dotted(_))
 
   val empty: Entity = Entity(Vector.empty)
 
@@ -105,10 +108,10 @@ object Entity {
     // bzl_gen_build:dir:entity
     // Alternative here, for other name we've used
     val spaces0 = Parser.charIn(" \t").rep0
-    val bzlBuildGen = ((Parser
-      .string("bzl_gen_build")
-      .orElse(Parser.string("depgraph")))
-      .surroundedBy(spaces0) *> Parser.string(":")).surroundedBy(spaces0)
+    val prefix = Parser.string("bzl_gen_build") | Parser.string("depgraph")
+    val bzlBuildGen =
+      (prefix.surroundedBy(spaces0) *> Parser.string(":")).surroundedBy(spaces0)
+
     val newLine = Parser.charIn("\r\n").void
 
     Parsers.repSkip(
