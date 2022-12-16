@@ -48,9 +48,8 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
     got.assertEquals(expected)
   }
 
-  /*
   test("test an example adding an edge with a comment") {
-    val got = struct("""
+    val got = extractString("""
     package foo.bar;
 
     import some.Pack;
@@ -60,13 +59,15 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
     class Bar { }
     """)
 
-    val expected = DefsRefs(
-        defs = ents("""["foo.bar.Bar"]"""),
-        refs = ents("""["fizzy"]"""))
+    val expected = DataBlock(
+      "",
+      defs = ents("""["foo.bar.Bar"]"""),
+      refs = ents("""["some.Pack"]"""),
+      bzl_gen_build_commands = SortedSet("ref:fizzy", "unref:some.Pack")
+    )
 
     got.assertEquals(expected)
   }
-   */
 
   test("static import") {
     val got = struct("""
