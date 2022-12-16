@@ -1,6 +1,6 @@
 package io.bazeltools.buildgen.javadefref
 
-import io.bazeltools.buildgen.shared.{DataBlock, Entity}
+import io.bazeltools.buildgen.shared.{Symbols, Entity}
 import scala.collection.immutable.SortedSet
 
 import cats.effect.IO
@@ -10,7 +10,7 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
 
   case class DefsRefs(defs: SortedSet[Entity], refs: SortedSet[Entity])
 
-  def extractString(in: String): IO[DataBlock] =
+  def extractString(in: String): IO[Symbols] =
     JavaSourceEntityExtractor.extract(in)
 
   def ents(s: String): SortedSet[Entity] =
@@ -59,8 +59,7 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
     class Bar { }
     """)
 
-    val expected = DataBlock(
-      "",
+    val expected = Symbols(
       defs = ents("""["foo.bar.Bar"]"""),
       refs = ents("""["some.Pack"]"""),
       bzl_gen_build_commands = SortedSet("ref:fizzy", "unref:some.Pack")

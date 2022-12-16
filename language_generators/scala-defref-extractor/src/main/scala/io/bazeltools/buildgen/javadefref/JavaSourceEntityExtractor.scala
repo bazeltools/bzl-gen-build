@@ -10,7 +10,7 @@ import scala.jdk.CollectionConverters._
 
 import ast.CompilationUnit
 import ast.`type`.{Type => JType}
-import io.bazeltools.buildgen.shared.{Entity, DataBlock}
+import io.bazeltools.buildgen.shared.{Entity, Symbols}
 import cats.data.Chain
 import com.github.javaparser.JavaParser
 import com.github.javaparser.ParserConfiguration
@@ -29,7 +29,7 @@ object JavaSourceEntityExtractor {
     new JavaParser(config)
   }
 
-  def extract(content: String): IO[DataBlock] = {
+  def extract(content: String): IO[Symbols] = {
     val result = parser.parse(content)
     (if (result.isSuccessful()) {
        IO.pure(result.getResult().get())
@@ -38,7 +38,7 @@ object JavaSourceEntityExtractor {
      }).map(structureOf(_))
   }
 
-  def structureOf(compUnit: CompilationUnit): DataBlock = {
+  def structureOf(compUnit: CompilationUnit): Symbols = {
     import Entity._
     // The parser is imperative and mutable, so we take a non-idiomatic
     // approach here and use mutable values to keep state
@@ -245,9 +245,7 @@ object JavaSourceEntityExtractor {
     val refs =
       (rootRefs.flatMap(expand) #::: fixedImp #::: wildImp).to(SortedSet)
 
-    allDirectives.foldLeft(DataBlock("", topLevelDefsTypes, refs)) {
-      case (prev, n) => prev.addBzlBuildGenCommand(n)
-    }
+    Symbols(topLevelDefsTypes, refs, allDirectives.iterator.to(SortedSet))
   }
 
 }
