@@ -256,9 +256,9 @@ object ScalaSourceEntityExtractor {
       case Left(_)    => Monad[Env].unit
     }
 
-  def log(s: String): Unit = {
-    require(s ne null)
-  }
+  // the idea here is we can replace the body with an actual log output if we are debugging
+  @inline
+  final def log(s: => String): Unit = ()
 
   def typeSelectToName(outerTerm: Term.Ref, n: Name): NonEmptyList[Name] = {
     @annotation.tailrec
