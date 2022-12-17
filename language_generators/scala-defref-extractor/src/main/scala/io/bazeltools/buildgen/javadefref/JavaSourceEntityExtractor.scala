@@ -39,7 +39,7 @@ object JavaSourceEntityExtractor {
      }).map(structureOf(_))
   }
 
-  private def structureOf(compUnit: CompilationUnit): DataBlock = {
+  private def structureOf(compUnit: CompilationUnit): Symbols = {
     import Entity._
     // The parser is imperative and mutable, so we take a non-idiomatic
     // approach here and use mutable values to keep state
