@@ -7,7 +7,7 @@ import cats.effect.unsafe.implicits.global
 
 class CanParseFileTest extends AnyFunSuite {
 
-  def assertParse(str: String, expected: DataBlock) =
+  def assertParse(str: String, expected: Symbols) =
     assert(ScalaSourceEntityExtractor.extract(str).unsafeRunSync() === expected)
 
   test("can extract a simple file") {
@@ -16,18 +16,16 @@ class CanParseFileTest extends AnyFunSuite {
 
     case class Cat(foo: String)
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.Cat"),
         Entity.dotted("com.foo.bar.Cat.foo")
       ),
       refs =
         SortedSet(Entity.dotted("String"), Entity.dotted("com.foo.bar.String")),
-      bzl_gen_build_commands = SortedSet(
-      )
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("can extract a strange syntax") {
@@ -43,8 +41,7 @@ class CanParseFileTest extends AnyFunSuite {
     }
     """
 
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(
         Entity.dotted("com.foo.bar.Cat"),
         Entity.dotted("com.foo.bar.Cat.expressionName"),
@@ -67,10 +64,9 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("com.foo.bar.com.example.Elephant"),
         Entity.dotted("com.foo.bar.com.example.Wolf")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("can extract a failing file") {
@@ -95,8 +91,7 @@ class CanParseFileTest extends AnyFunSuite {
       }
     }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(
         Entity.dotted("com.foo.bar.TestObj"),
         Entity.dotted("com.foo.bar.TestObj.test")
@@ -127,10 +122,9 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("z"),
         Entity.dotted("z.FooBarZ")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("can extract a failing file 2") {
@@ -155,8 +149,7 @@ trait TestTrait extends GenA with GenB with Zeb{
       .fff('foo -> foo)
 }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(
         Entity.dotted("com.foo.bar.TestTrait"),
         Entity.dotted("com.foo.bar.TestTrait.foo"),
@@ -222,11 +215,10 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.OtherClass.OtherSubClass"),
         Entity.dotted("com.foo.bar.OtherSubClass")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
 
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Add transitive links") {
@@ -235,8 +227,7 @@ trait TestTrait extends GenA with GenB with Zeb{
 
         case class Cat(foo: String) extends Dog
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.Cat"),
         Entity.dotted("com.foo.bar.Cat.foo")
@@ -247,10 +238,9 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.Dog"),
         Entity.dotted("com.foo.bar.String")
       ),
-      bzl_gen_build_commands = SortedSet(
-      )
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Class arg") {
@@ -260,8 +250,7 @@ trait TestTrait extends GenA with GenB with Zeb{
         class Cat(dog: Dog) {
         }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.Cat"),
         Entity.dotted("com.foo.bar.Cat.dog")
@@ -270,10 +259,9 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("Dog"),
         Entity.dotted("com.foo.bar.Dog")
       ),
-      bzl_gen_build_commands = SortedSet(
-      )
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Add more transitive links") {
@@ -283,8 +271,7 @@ trait TestTrait extends GenA with GenB with Zeb{
   sealed abstract class AbstractC
     extends BaseType[BaseTpeParamA, BaseTpeParamB, BaseTpeParamC]{}
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(Entity.dotted("com.foo.bar.AbstractC")),
       SortedSet(
         Entity.dotted("BaseTpeParamA"),
@@ -296,11 +283,10 @@ trait TestTrait extends GenA with GenB with Zeb{
         Entity.dotted("com.foo.bar.BaseTpeParamC"),
         Entity.dotted("com.foo.bar.BaseType")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
 
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Add trait transitive links") {
@@ -319,8 +305,7 @@ trait BaseNode
     with Express {
 
         }    """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(Entity.dotted("com.example.BaseNode")),
       SortedSet(
         Entity.dotted("CaseClassConfig"),
@@ -381,10 +366,9 @@ trait BaseNode
         Entity.dotted("com.example.com.animal.dogs.pugs.Small"),
         Entity.dotted("com.example.com.animal.dogs.retriever")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Add object transitive links") {
@@ -403,8 +387,7 @@ object BaseNode
     with Express {
 
         }    """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(Entity.dotted("com.example.BaseNode")),
       SortedSet(
         Entity.dotted("CaseClassConfig"),
@@ -465,10 +448,9 @@ object BaseNode
         Entity.dotted("com.example.com.animal.dogs.pugs.Small"),
         Entity.dotted("com.example.com.animal.dogs.retriever")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Add public method link") {
@@ -504,8 +486,7 @@ case class BaseNode() {
     }
 }
 """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(
         Entity.dotted("com.example.BaseNode"),
         Entity.dotted("com.example.BaseNode.myFunction"),
@@ -580,10 +561,9 @@ case class BaseNode() {
         Entity.dotted("z.TypeK"),
         Entity.dotted("z.TypeL")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Failing sample") {
@@ -598,8 +578,7 @@ object syntax
     with H.L.Ops
     with P.Q.Ops
 """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(
         Entity.dotted("com.example.syntax")
       ),
@@ -639,10 +618,9 @@ object syntax
         Entity.dotted("types.A.Ops"),
         Entity.dotted("types.B.Ops")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("object value") {
@@ -656,8 +634,7 @@ object MyObject {
 }
 
 """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       SortedSet(
         Entity.dotted("com.example.MyObject"),
         Entity.dotted("com.example.MyObject.foo")
@@ -680,10 +657,9 @@ object MyObject {
         Entity.dotted("z"),
         Entity.dotted("z.TypeA")
       ),
-      SortedSet(
-      )
+      SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Wildcard import") {
@@ -697,8 +673,7 @@ object MyObject {
             def bar(implicit np: Nope): Long = ???
         }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.Cat"),
         Entity.dotted("com.foo.bar.Cat.bar"),
@@ -730,10 +705,9 @@ object MyObject {
         Entity.dotted("com.foo.bar.com.baz.buzz"),
         Entity.dotted("com.foo.bar.com.baz.buzz.Dope")
       ),
-      bzl_gen_build_commands = SortedSet(
-      )
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Refer to object defined elsewhere") {
@@ -745,8 +719,7 @@ object MyObject {
             }
         }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.App"),
         Entity.dotted("com.foo.bar.App.command")
@@ -763,10 +736,9 @@ object MyObject {
         Entity.dotted("com.monovore.decline.Command"),
         Entity.dotted("com.monovore.decline.Opts")
       ),
-      bzl_gen_build_commands = SortedSet(
-      )
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("Failing refs case") {
@@ -779,8 +751,7 @@ object MyObject {
             }
         }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.App"),
         Entity.dotted("com.foo.bar.App.foo"),
@@ -809,10 +780,9 @@ object MyObject {
         Entity.dotted("String"),
         Entity.dotted("com.foo.bar.String")
       ),
-      bzl_gen_build_commands = SortedSet(
-      )
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
 }

@@ -13,7 +13,7 @@ import io.circe.syntax.EncoderOps
 
 abstract class DriverApplication extends IOApp {
   def name: String
-  def extract(data: String): IO[DataBlock]
+  def extract(data: String): IO[Symbols]
 
   def readToString(path: Path): IO[String] =
     IO.blocking(
@@ -45,7 +45,7 @@ abstract class DriverApplication extends IOApp {
               )
             )
         }
-      } yield e.copy(entity_path = path)
+      } yield e.withEntityPath(path)
     }
   }
   def main: Command[IO[ExitCode]] = decline.Command(
