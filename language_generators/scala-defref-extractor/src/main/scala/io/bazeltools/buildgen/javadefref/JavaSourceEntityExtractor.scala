@@ -21,6 +21,7 @@ import com.github.javaparser.ParseProblemException
  * https://github.com/pantsbuild/pants/blob/4e7c57db992150b3fc972e684561edb8231bba3d/src/python/pants/backend/java/dependency_inference/PantsJavaParserLauncher.java#L1
  */
 object JavaSourceEntityExtractor {
+  // this is mutable, so we need to guard any access
   private[this] lazy val parser = {
     val config = new ParserConfiguration();
 
@@ -30,7 +31,7 @@ object JavaSourceEntityExtractor {
   }
 
   def extract(content: String): IO[Symbols] = {
-    val result = parser.parse(content)
+    val result = parser.synchronized { parser.parse(content) }
     (if (result.isSuccessful()) {
        IO.pure(result.getResult().get())
      } else {
@@ -38,7 +39,7 @@ object JavaSourceEntityExtractor {
      }).map(structureOf(_))
   }
 
-  def structureOf(compUnit: CompilationUnit): Symbols = {
+  private def structureOf(compUnit: CompilationUnit): DataBlock = {
     import Entity._
     // The parser is imperative and mutable, so we take a non-idiomatic
     // approach here and use mutable values to keep state
