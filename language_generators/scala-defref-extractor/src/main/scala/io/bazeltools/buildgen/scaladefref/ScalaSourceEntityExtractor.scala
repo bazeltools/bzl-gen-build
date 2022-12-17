@@ -20,7 +20,7 @@ import scala.meta.{
 import scala.meta.parsers.XtensionParseInputLike
 
 import cats.syntax.all._
-import io.bazeltools.buildgen.shared.{Entity, PathTree, DataBlock}
+import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
 object ScalaSourceEntityExtractor {
   case class ParseException(parseError: Parsed.Error)
@@ -38,7 +38,7 @@ object ScalaSourceEntityExtractor {
     })
   }
 
-  def extract(content: String): IO[DataBlock] =
+  def extract(content: String): IO[Symbols] =
     Input
       .VirtualFile("Source.scala", content)
       .parse[Source]
@@ -334,7 +334,7 @@ object ScalaSourceEntityExtractor {
 
   val unitEnv: Env[Unit] = Monad[Env].unit
 
-  def processScopeTree(pt: PathTree[Long, ScopeState]): DataBlock = {
+  def processScopeTree(pt: PathTree[Long, ScopeState]): Symbols = {
 
     // For ScopeState in this pathTree we can use reference equality for
     // caching
@@ -463,17 +463,23 @@ object ScalaSourceEntityExtractor {
         }
       }
 
-    def processScope(s: ScopeState): Writer[DataBlock, Unit] = {
+    def processScope(s: ScopeState): Writer[Symbols, Unit] = {
       val defs = s.definedEntities
       val refs = s.nonLocalRefs(getResolve(s))
 
-      Writer.tell(DataBlock("", defs = defs, refs = refs))
+      Writer.tell(
+        Symbols(
+          defs = defs,
+          refs = refs,
+          bzl_gen_build_commands = SortedSet.empty
+        )
+      )
     }
 
     pt.traverse(processScope).run._1
   }
 
-  def getDefsRefs(tree: Tree): DataBlock = {
+  def getDefsRefs(tree: Tree): Symbols = {
     val ss = inspect(tree).run(ScopeTree.empty: SS).value._1
     processScopeTree(ss.tree)
   }
