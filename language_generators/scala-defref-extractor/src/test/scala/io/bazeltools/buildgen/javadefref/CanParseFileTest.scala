@@ -7,7 +7,7 @@ import cats.effect.unsafe.implicits.global
 
 class CanParseFileTest extends AnyFunSuite {
 
-  def assertParse(str: String, expected: DataBlock) =
+  def assertParse(str: String, expected: Symbols) =
     assert(JavaSourceEntityExtractor.extract(str).unsafeRunSync() === expected)
 
   test("can extract a simple file") {
@@ -18,13 +18,12 @@ class CanParseFileTest extends AnyFunSuite {
 
     }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(Entity.dotted("com.foo.bar.Cat")),
       refs = SortedSet(),
-      bzl_gen_build_commands = SortedSet()
+      bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
   test("can extract a was failing file") {
@@ -58,8 +57,7 @@ public class HolderClass {
     public static final DataKey<TT> PPPQE = "ABCD";
 }
     """
-    val expectedDataBlock = DataBlock(
-      "",
+    val expectedSymbols = Symbols(
       defs = SortedSet(
         Entity.dotted("com.foo.bar.ExampleIntegerEncoder"),
         Entity.dotted("com.foo.bar.HolderClass"),
@@ -101,7 +99,7 @@ public class HolderClass {
       ),
       bzl_gen_build_commands = SortedSet()
     )
-    assertParse(simpleContent, expectedDataBlock)
+    assertParse(simpleContent, expectedSymbols)
   }
 
 }

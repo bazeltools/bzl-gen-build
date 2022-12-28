@@ -20,7 +20,7 @@ import scala.meta.{
 import scala.meta.parsers.XtensionParseInputLike
 
 import cats.syntax.all._
-import io.bazeltools.buildgen.shared.{Entity, PathTree, DataBlock}
+import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
 object ScalaSourceEntityExtractor {
   case class ParseException(parseError: Parsed.Error)
@@ -38,7 +38,7 @@ object ScalaSourceEntityExtractor {
     })
   }
 
-  def extract(content: String): IO[DataBlock] =
+  def extract(content: String): IO[Symbols] =
     Input
       .VirtualFile("Source.scala", content)
       .parse[Source]
@@ -50,40 +50,6 @@ object ScalaSourceEntityExtractor {
           prev.addBzlBuildGenCommand(n)
         }
       }
-
-  sealed abstract class NamePart {
-    def toEntity: Option[Entity]
-  }
-  object NamePart {
-    case class Package(entity: Entity) extends NamePart {
-      def toEntity = Some(entity)
-    }
-    case class Defn(entity: Entity) extends NamePart {
-      def toEntity = Some(entity)
-    }
-    case object Anonymous extends NamePart {
-      def toEntity = None
-    }
-
-    /** a list of all packages a scope with a vector of NameParts a non-local
-      * reference could refer to
-      */
-    def referencePackages(path: Seq[NamePart]): NonEmptyList[Entity] = {
-      def loop(pathList: List[NamePart]): List[Entity] =
-        pathList match {
-          case NamePart.Package(ent) :: tail =>
-            // package foo {
-            //   package bar {
-            //     // refer to name x could be x, foo.x, foo.bar.x
-            //   }
-            // }
-            ent :: loop(tail).map(ent / _)
-          case _ => Nil
-        }
-
-      NonEmptyList(Entity.empty, loop(path.toList))
-    }
-  }
 
   // TODO: we have to track terms and types separately. We can't forget which ones have been defined
   // since we can have shadowing of one type that might look like another
@@ -290,9 +256,9 @@ object ScalaSourceEntityExtractor {
       case Left(_)    => Monad[Env].unit
     }
 
-  def log(s: String): Unit = {
-    require(s ne null)
-  }
+  // the idea here is we can replace the body with an actual log output if we are debugging
+  @inline
+  final def log(s: => String): Unit = ()
 
   def typeSelectToName(outerTerm: Term.Ref, n: Name): NonEmptyList[Name] = {
     @annotation.tailrec
@@ -368,7 +334,7 @@ object ScalaSourceEntityExtractor {
 
   val unitEnv: Env[Unit] = Monad[Env].unit
 
-  def processScopeTree(pt: PathTree[Long, ScopeState]): DataBlock = {
+  def processScopeTree(pt: PathTree[Long, ScopeState]): Symbols = {
 
     // For ScopeState in this pathTree we can use reference equality for
     // caching
@@ -497,17 +463,23 @@ object ScalaSourceEntityExtractor {
         }
       }
 
-    def processScope(s: ScopeState): Writer[DataBlock, Unit] = {
+    def processScope(s: ScopeState): Writer[Symbols, Unit] = {
       val defs = s.definedEntities
       val refs = s.nonLocalRefs(getResolve(s))
 
-      Writer.tell(DataBlock("", defs = defs, refs = refs))
+      Writer.tell(
+        Symbols(
+          defs = defs,
+          refs = refs,
+          bzl_gen_build_commands = SortedSet.empty
+        )
+      )
     }
 
     pt.traverse(processScope).run._1
   }
 
-  def getDefsRefs(tree: Tree): DataBlock = {
+  def getDefsRefs(tree: Tree): Symbols = {
     val ss = inspect(tree).run(ScopeTree.empty: SS).value._1
     processScopeTree(ss.tree)
   }

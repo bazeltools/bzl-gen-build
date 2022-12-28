@@ -21,6 +21,11 @@ sealed trait PathTree[K, +V] {
   def mostSpecific(k: List[K]): Option[V] =
     pathGet(k).toList.reverse.collectFirst { case Some(v) => v }
 
+  def keys: LazyList[List[K]] =
+    toLazyList.map(_._1)
+
+  def toLazyList: LazyList[(List[K], V)]
+
   def mostSpecificMapFilter[U](
       k: List[K]
   )(fn: (List[K], V) => Option[U]): Option[U] = {
@@ -43,15 +48,32 @@ sealed trait PathTree[K, +V] {
   def getSubTree(k: List[K]): PathTree[K, V]
   def updateSubTree[V1 >: V](k: List[K], that: PathTree[K, V1]): PathTree[K, V1]
   def value: Option[V]
+
+  def isEmpty: Boolean
 }
 
 object PathTree {
+  // Invariant: in branches, all values are nonEmpty
   private case class Node[K, V](
       value: Option[V],
       branches: SortedMap[K, PathTree[K, V]]
   )(implicit val ordering: Ordering[K])
       extends PathTree[K, V] {
     def children = branches.keySet
+
+    def isEmpty = value.isEmpty && branches.isEmpty
+
+    lazy val toLazyList: LazyList[(List[K], V)] = {
+      lazy val tail = for {
+        (k, sub) <- branches.to(LazyList)
+        (subKeys, v) <- sub.toLazyList
+      } yield (k :: subKeys, v)
+
+      value match {
+        case Some(v) => (Nil, v) #:: tail
+        case None    => tail
+      }
+    }
 
     def map[U](fn: V => U): PathTree[K, U] =
       Node(value.map(fn), branches.view.mapValues(_.map(fn)).to(SortedMap))
@@ -108,7 +130,11 @@ object PathTree {
             case Some(rest) => rest
           }
           val nextUpdated = nextValue.updateSubTree(tail, that)
-          Node(value, branches.updated(head, nextUpdated))
+          val b1 =
+            if (nextUpdated.isEmpty) branches.removed(head)
+            else branches.updated(head, nextUpdated)
+
+          Node(value, b1)
       }
 
     def updated[V1 >: V](k: List[K], v: Option[V1]): PathTree[K, V1] =
@@ -119,7 +145,12 @@ object PathTree {
             case Some(n) => n
             case None    => PathTree.empty[K]
           }
-          Node(value, branches.updated(head, child.updated(tail, v)))
+          val c1 = child.updated(tail, v)
+          val b1 =
+            if (c1.isEmpty) branches.removed(head)
+            else branches.updated(head, c1)
+
+          Node(value, b1)
       }
   }
 
