@@ -51,9 +51,18 @@ public interface ExampleIntegerEncoder {
         return (data != null ? data : 0) + a + b;
     }
 }
+
+public class HolderClass {
+    @DefaultDataKey(name="pushConsent")
+    public static final DataKey<TT> PPPQE = "ABCD";
+}
     """
     val expectedSymbols = Symbols(
-      defs = SortedSet(Entity.dotted("com.foo.bar.ExampleIntegerEncoder")),
+      defs = SortedSet(
+        Entity.dotted("com.foo.bar.ExampleIntegerEncoder"),
+        Entity.dotted("com.foo.bar.HolderClass"),
+        Entity.dotted("com.foo.bar.MixinDefaultPushConsentKey")
+      ),
       refs = SortedSet(
         Entity.dotted("Animal"),
         Entity.dotted("Cat"),
@@ -80,7 +89,13 @@ public interface ExampleIntegerEncoder {
         Entity.dotted("com.foo.zeb.FeatureEncoderDef"),
         Entity.dotted("com.foo.zeb.Funky"),
         Entity.dotted("com.foo.zeb.Validate"),
-        Entity.dotted("javax.annotation.Nullable")
+        Entity.dotted("javax.annotation.Nullable"),
+        Entity.dotted("DataKey"),
+        Entity.dotted("DefaultDataKey"),
+        Entity.dotted("TT"),
+        Entity.dotted("com.foo.bar.DataKey"),
+        Entity.dotted("com.foo.bar.DefaultDataKey"),
+        Entity.dotted("com.foo.bar.TT")
       ),
       bzl_gen_build_commands = SortedSet()
     )
