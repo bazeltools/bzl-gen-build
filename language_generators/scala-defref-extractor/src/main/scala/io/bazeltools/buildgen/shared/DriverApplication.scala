@@ -28,7 +28,7 @@ abstract class DriverApplication extends IOApp {
       )
     }
 
-  private[this] def extractDataBlocks(
+     private[this] def extractDataBlocks(
       workingDirectory: Path,
       paths: String*
   ): IO[List[DataBlock]] = {
