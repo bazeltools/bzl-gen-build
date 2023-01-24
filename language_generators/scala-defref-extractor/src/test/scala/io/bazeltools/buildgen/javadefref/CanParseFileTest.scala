@@ -34,6 +34,7 @@ import com.foo.zeb.Animal;
 import com.foo.zeb.Cat;
 import com.foo.zeb.Dog;
 import com.foo.zeb.Dinosaur;
+import com.foo.zeb.Dino.Dog;
 import com.foo.zeb.Funky;
 import com.foo.zeb.FeatureEncoderDef;
 import com.foo.zeb.Validate;
@@ -85,6 +86,8 @@ public class HolderClass {
         Entity.dotted("com.foo.zeb.Animal"),
         Entity.dotted("com.foo.zeb.Cat"),
         Entity.dotted("com.foo.zeb.Dinosaur"),
+        Entity.dotted("com.foo.zeb.Dino.Dog"),
+        Entity.dotted("com.foo.zeb.Dino"),
         Entity.dotted("com.foo.zeb.Dog"),
         Entity.dotted("com.foo.zeb.FeatureEncoderDef"),
         Entity.dotted("com.foo.zeb.Funky"),

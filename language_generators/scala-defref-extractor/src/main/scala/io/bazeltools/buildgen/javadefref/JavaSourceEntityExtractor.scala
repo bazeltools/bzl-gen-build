@@ -281,7 +281,27 @@ object JavaSourceEntityExtractor {
     val refs =
       (rootRefs.flatMap(expand) #::: fixedImp #::: wildImp).to(SortedSet)
 
-    Symbols(topLevelDefsTypes, refs, allDirectives.iterator.to(SortedSet))
+    // Take all references to the likes of
+    // com.foo.Dog.Example
+    // and ensure we include refs for
+    // com.foo.Dog
+    // and com.foo.Dog.Example
+    val expandedRefs = refs.flatMap { ref =>
+      ref :: ref.prefixes.iterator.filter { e =>
+        val validE = e.parts.nonEmpty && e.parts.last.nonEmpty
+        if (validE) {
+          val chr = e.parts.last.charAt(0)
+          chr >= 'A' && chr <= 'Z'
+        } else {
+          false
+        }
+      }.toList
+    }
+    Symbols(
+      topLevelDefsTypes,
+      expandedRefs,
+      allDirectives.iterator.to(SortedSet)
+    )
   }
 
 }
