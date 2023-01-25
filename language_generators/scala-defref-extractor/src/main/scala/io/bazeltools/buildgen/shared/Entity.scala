@@ -108,7 +108,7 @@ object Entity {
     // bzl_gen_build:dir:entity
     // Alternative here, for other name we've used
     val spaces0 = Parser.charIn(" \t").rep0
-    val prefix = Parser.string("bzl_gen_build") | Parser.string("depgraph")
+    val prefix = Parser.string("bzl_gen_build")
     val bzlBuildGen =
       (prefix.surroundedBy(spaces0) *> Parser.string(":")).surroundedBy(spaces0)
 

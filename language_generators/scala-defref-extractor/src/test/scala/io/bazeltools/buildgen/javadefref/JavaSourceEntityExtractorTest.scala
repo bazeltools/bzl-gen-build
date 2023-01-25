@@ -53,8 +53,8 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
     package foo.bar;
 
     import some.Pack;
-    // depgraph:ref:fizzy
-    // depgraph:unref:some.Pack
+    // bzl_gen_build:ref:fizzy
+    // bzl_gen_build:unref:some.Pack
 
     class Bar { }
     """)
