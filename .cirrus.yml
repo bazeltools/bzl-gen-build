@@ -6,4 +6,4 @@ macos_arm_task:
   only_if: $CIRRUS_RELEASE != ''
   script: arch -arm64 ./.cirrus/publish-macos-m1-build.sh
   env:
-    GITHUB_TOKEN: ENCRYPTED[!a017be48f31cd4ab33b145687dae10069724ca68113688372bf51d13a5ee5463063f197d1fb8f4c3f09cb639ad56d548!]
+    GITHUB_TOKEN: ENCRYPTED[f1125affb5d44cb787090a9be568eb37009270396a5d3d5a626aa9dc2a03a84390a69bf3ede3e2f1bc47ea23e084cae5]
