@@ -1,6 +1,5 @@
 # Modulular build generator
 
-
 This is a modular build generator, its designed so its easy to pick and choose components, modify intermediate states (all json). post process or use the outputs for new purposes as it makes sense.
 
 
