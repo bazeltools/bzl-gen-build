@@ -330,6 +330,10 @@ async fn print_file(
                                 let t = extra_kv_pairs.entry("deps".to_string()).or_default();
                                 t.push(manual_ref.target_value.clone())
                             }
+                            directive::ManualRefDirective::DataRef => {
+                                let t = extra_kv_pairs.entry("data".to_string()).or_default();
+                                t.push(manual_ref.target_value.clone())
+                            }
                         },
                     }
                 }
@@ -431,6 +435,12 @@ async fn print_file(
                 directive::ManualRefDirective::Ref => {
                     extra_kv_pairs
                         .entry("deps".to_string())
+                        .or_default()
+                        .push(manual_ref.target_value.clone());
+                }
+                directive::ManualRefDirective::DataRef => {
+                    extra_kv_pairs
+                        .entry("data".to_string())
                         .or_default()
                         .push(manual_ref.target_value.clone());
                 }

@@ -51,6 +51,7 @@ impl std::fmt::Display for SrcDirective {
 pub enum ManualRefDirective {
     RuntimeRef,
     Ref,
+    DataRef,
 }
 impl ManualRefDirective {
     pub fn parse<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -59,6 +60,7 @@ impl ManualRefDirective {
         alt((
             value(ManualRefDirective::RuntimeRef, tag("manual_runtime_ref")),
             value(ManualRefDirective::Ref, tag("manual_ref")),
+            value(ManualRefDirective::DataRef, tag("data_ref")),
         ))(input)
     }
 }
@@ -66,7 +68,8 @@ impl std::fmt::Display for ManualRefDirective {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ManualRefDirective::RuntimeRef => write!(f, "manual_runtime_ref"),
-            ManualRefDirective::Ref => write!(f, "manual_runtime_ref"),
+            ManualRefDirective::Ref => write!(f, "manual_ref"),
+            ManualRefDirective::DataRef => write!(f, "data_ref"),
         }
     }
 }
@@ -450,6 +453,14 @@ mod tests {
             Directive::ManualRef(ManualRefConfig {
                 command: ManualRefDirective::RuntimeRef,
                 target_value: "//:build_gradle_properties_jar".to_string()
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("data_ref://x/y/z:artifact"),
+            Directive::ManualRef(ManualRefConfig {
+                command: ManualRefDirective::DataRef,
+                target_value: "//x/y/z:artifact".to_string()
             })
         );
 
