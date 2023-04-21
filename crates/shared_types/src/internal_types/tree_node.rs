@@ -3,7 +3,10 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    directive::{BinaryRefAndPath, EntityDirectiveConfig, ManualRefConfig, SrcDirectiveConfig},
+    directive::{
+        AttrStringListConfig, BinaryRefAndPath, EntityDirectiveConfig, ManualRefConfig,
+        SrcDirectiveConfig,
+    },
     Directive,
 };
 
@@ -28,6 +31,9 @@ pub struct TreeNode {
 
     #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
     pub binary_ref_directives: Vec<BinaryRefAndPath>,
+
+    #[serde(default, serialize_with = "crate::serde_helpers::ordered_list")]
+    pub attr_string_list_directives: Vec<AttrStringListConfig>,
 }
 
 impl TryFrom<crate::api::extracted_data::DataBlock> for TreeNode {
@@ -78,6 +84,9 @@ impl TreeNode {
                     entity_path: entity_path.map(|e| e.to_string()),
                     binary_refs: mr.clone(),
                 }),
+                Directive::AttrStringList(attr) => {
+                    self.attr_string_list_directives.push(attr.clone())
+                }
             }
         }
         self.entity_directives.sort();
@@ -88,6 +97,9 @@ impl TreeNode {
 
         self.manual_ref_directives.sort();
         self.manual_ref_directives.dedup();
+
+        self.attr_string_list_directives.sort();
+        self.attr_string_list_directives.dedup();
     }
 
     pub fn apply_directives<'a, T>(&mut self, directives: T)
@@ -121,5 +133,10 @@ impl TreeNode {
             .extend(std::mem::take(&mut other.manual_ref_directives).into_iter());
         self.manual_ref_directives.sort();
         self.manual_ref_directives.dedup();
+
+        self.attr_string_list_directives
+            .extend(std::mem::take(&mut other.attr_string_list_directives).into_iter());
+        self.attr_string_list_directives.sort();
+        self.attr_string_list_directives.dedup();
     }
 }

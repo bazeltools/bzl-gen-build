@@ -335,6 +335,12 @@ async fn print_file(
                                 t.push(manual_ref.target_value.clone())
                             }
                         },
+                        Directive::AttrStringList(attr) => {
+                            let t = extra_kv_pairs
+                                .entry(attr.attr_name.to_string())
+                                .or_default();
+                            t.push(attr.value.clone())
+                        }
                     }
                 }
             }
@@ -450,6 +456,20 @@ async fn print_file(
 
     apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
 
+    fn apply_attr_string_lists(
+        extra_kv_pairs: &mut HashMap<String, Vec<String>>,
+        node_metadata: &GraphNodeMetadata,
+    ) {
+        for attr in node_metadata.attr_string_lists.iter() {
+            let t = extra_kv_pairs
+                .entry(attr.attr_name.to_string())
+                .or_default();
+            t.push(attr.value.clone());
+        }
+    }
+
+    apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
+
     if use_rglob {
         let target = TargetEntry {
             name: target_name.clone(),
@@ -512,6 +532,7 @@ async fn print_file(
                 };
 
                 apply_manual_refs(&mut extra_kv_pairs, metadata);
+                apply_attr_string_lists(&mut extra_kv_pairs, metadata);
 
                 let mut t = TargetEntries {
                     entries: vec![filegroup_target],

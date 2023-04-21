@@ -9,7 +9,10 @@ use crate::{async_read_json_file, read_json_file, write_json_file, BuildGraphArg
 
 use anyhow::{anyhow, Result};
 use bzl_gen_build_shared_types::{
-    directive::{BinaryRefAndPath, BinaryRefConfig, EntityDirectiveConfig, ManualRefConfig},
+    directive::{
+        AttrStringListConfig, BinaryRefAndPath, BinaryRefConfig, EntityDirectiveConfig,
+        ManualRefConfig,
+    },
     internal_types::tree_node::TreeNode,
     *,
 };
@@ -47,10 +50,14 @@ pub struct GraphNodeMetadata {
     pub binary_refs: Vec<BinaryRefAndPath>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub manual_refs: Vec<ManualRefConfig>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attr_string_lists: Vec<AttrStringListConfig>,
 }
 impl GraphNodeMetadata {
     pub fn is_empty(&self) -> bool {
-        self.binary_refs.is_empty() && self.manual_refs.is_empty()
+        self.binary_refs.is_empty()
+            && self.manual_refs.is_empty()
+            && self.attr_string_lists.is_empty()
     }
 }
 
@@ -59,6 +66,7 @@ impl<'a> From<&'a NodeExternalState> for GraphNodeMetadata {
         Self {
             binary_refs: nes.binary_refs.clone(),
             manual_refs: nes.manual_refs.clone(),
+            attr_string_lists: nes.attr_string_lists.clone(),
         }
     }
 }
@@ -102,6 +110,7 @@ struct NodeExternalState {
     pub node_type: NodeType,
     pub binary_refs: Vec<BinaryRefAndPath>,
     pub manual_refs: Vec<ManualRefConfig>,
+    pub attr_string_lists: Vec<AttrStringListConfig>,
 }
 impl NodeExternalState {
     pub fn empty(name: Arc<String>, node_type: NodeType) -> Self {
@@ -110,6 +119,7 @@ impl NodeExternalState {
             node_type,
             binary_refs: Default::default(),
             manual_refs: Default::default(),
+            attr_string_lists: Default::default(),
         }
     }
 }
@@ -566,6 +576,7 @@ async fn load_initial_graph(
                         e.entity_directives,
                         e.binary_ref_directives,
                         e.manual_ref_directives,
+                        e.attr_string_list_directives,
                     ),
                 )
             })
@@ -655,6 +666,7 @@ async fn load_initial_graph(
                 entity_directives,
                 binary_ref_directives,
                 manual_ref_directives,
+                attr_string_list_directives,
             ),
         ) = li.await??;
 
@@ -666,6 +678,7 @@ async fn load_initial_graph(
             node_type: NodeType::RealNode,
             binary_refs: binary_ref_directives,
             manual_refs: manual_ref_directives,
+            attr_string_lists: attr_string_list_directives,
         };
         reverse_map.insert(idx, Arc::new(node_external_state));
 
@@ -815,9 +828,10 @@ pub async fn build_graph(
             Ok(parsed_directives) => {
                 for d in parsed_directives {
                     match d {
-                        Directive::BinaryRef(_) => (),    // handled elsewhere
-                        Directive::SrcDirective(_) => (), // handled elsewhere
-                        Directive::ManualRef(_) => (),    // handled elsewhere
+                        Directive::BinaryRef(_) => (),      // handled elsewhere
+                        Directive::SrcDirective(_) => (),   // handled elsewhere
+                        Directive::ManualRef(_) => (),      // handled elsewhere
+                        Directive::AttrStringList(_) => (), // handled elsewhere
                         Directive::EntityDirective(ed) => {
                             configured_entity_directives.push(ed.clone())
                         }

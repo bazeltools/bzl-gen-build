@@ -75,6 +75,25 @@ impl std::fmt::Display for ManualRefDirective {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub enum AttrDirective {
+    StringList,
+}
+impl AttrDirective {
+    pub fn parse<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, AttrDirective, E> {
+        alt((value(AttrDirective::StringList, tag("attr.string_list")),))(input)
+    }
+}
+impl std::fmt::Display for AttrDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttrDirective::StringList => write!(f, "attr.string_list"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum BinaryRefDirective {
     GenerateBinary,
 }
@@ -136,6 +155,12 @@ pub struct ManualRefConfig {
     pub target_value: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct AttrStringListConfig {
+    pub attr_name: String,
+    pub value: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BinaryRefAndPath {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -157,6 +182,7 @@ pub enum Directive {
     EntityDirective(EntityDirectiveConfig),
     ManualRef(ManualRefConfig),
     BinaryRef(BinaryRefConfig),
+    AttrStringList(AttrStringListConfig),
 }
 
 impl Directive {
@@ -276,6 +302,42 @@ impl Directive {
         ))
     }
 
+    fn parse_attr_string_list_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, Directive, E> {
+        let (input, _) = AttrDirective::parse(input)?;
+        let (input, _) = nom::error::context(
+            "colon after entity",
+            tuple((space0, nom::bytes::complete::tag(":"), space0)),
+        )(input)?;
+
+        let (input, key) = nom::error::context(
+            "non-colon",
+            nom::bytes::complete::take_while1(|e| !(e == ' ' || e == ':')),
+        )(input)?;
+
+        let (input, _) = nom::error::context(
+            "colon after entity",
+            tuple((space0, nom::bytes::complete::tag(":"), space0)),
+        )(input)?;
+
+        let (input, value) = nom::error::context(
+            "non-colon",
+            nom::bytes::complete::take_while1(|e| !(e == ' ')),
+        )(input)?;
+
+        let (input, _) = space0(input)?;
+        let (input, _) = nom::combinator::eof(input)?;
+
+        Ok((
+            input,
+            Directive::AttrStringList(AttrStringListConfig {
+                attr_name: key.to_string(),
+                value: value.to_string(),
+            }),
+        ))
+    }
+
     fn parse_src_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> IResult<&'a str, Directive, E> {
@@ -348,6 +410,7 @@ impl Directive {
             Directive::parse_entity_directive,
             Directive::parse_manual_ref_directive,
             Directive::parse_binary_ref_directive,
+            Directive::parse_attr_string_list_directive,
         ))(input)
     }
 }
@@ -393,6 +456,11 @@ impl std::fmt::Display for Directive {
                     write!(f, "{}", e)?;
                 }
                 write!(f, " }}")?;
+            }
+            Directive::AttrStringList(AttrStringListConfig { attr_name, value }) => {
+                write!(f, "attr.string_list:")?;
+                write!(f, "{}:", attr_name)?;
+                write!(f, "{}", value)?;
             }
         }
         Ok(())
@@ -461,6 +529,14 @@ mod tests {
             Directive::ManualRef(ManualRefConfig {
                 command: ManualRefDirective::DataRef,
                 target_value: "//x/y/z:artifact".to_string()
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("attr.string_list:plugins://x/y/z:artifact"),
+            Directive::AttrStringList(AttrStringListConfig {
+                attr_name: "plugins".to_string(),
+                value: "//x/y/z:artifact".to_string()
             })
         );
 
