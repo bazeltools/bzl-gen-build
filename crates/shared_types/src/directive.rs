@@ -357,10 +357,7 @@ impl Directive {
 
         let (input, _) = nom::combinator::eof(input)?;
 
-        Ok((
-            input,
-            (src_entity, dest_entities),
-        ))
+        Ok((input, (src_entity, dest_entities)))
     }
 
     pub fn parse_entity_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -413,9 +410,12 @@ impl Directive {
 
 impl std::fmt::Display for Directive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
-        fn write_string_list(f: &mut std::fmt::Formatter<'_>,
-                command: &String, name: &String, values: &Vec<String>) -> std::fmt::Result {
+        fn write_string_list(
+            f: &mut std::fmt::Formatter<'_>,
+            command: &String,
+            name: &String,
+            values: &Vec<String>,
+        ) -> std::fmt::Result {
             write!(f, "{}:", command)?;
             write!(f, "{}", name)?;
             write!(f, " -> {{")?;
@@ -430,7 +430,6 @@ impl std::fmt::Display for Directive {
             write!(f, " }}")?;
             Ok(())
         }
-
 
         match self {
             Directive::ManualRef(ManualRefConfig {

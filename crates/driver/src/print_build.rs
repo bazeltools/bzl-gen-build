@@ -450,7 +450,6 @@ async fn print_file(
 
     apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
 
-
     fn append_key_values(
         extra_kv_pairs: &mut HashMap<String, Vec<String>>,
         key: &String,
@@ -461,7 +460,6 @@ async fn print_file(
             .or_default()
             .extend(values.iter().cloned());
     }
-
 
     fn apply_attr_string_lists(
         extra_kv_pairs: &mut HashMap<String, Vec<String>>,
