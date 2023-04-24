@@ -75,6 +75,30 @@ impl std::fmt::Display for ManualRefDirective {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub enum AttrDirective {
+    StringList,
+    LabelList,
+}
+impl AttrDirective {
+    pub fn parse<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, AttrDirective, E> {
+        alt((
+            value(AttrDirective::LabelList, tag("attr.label_list")),
+            value(AttrDirective::StringList, tag("attr.string_list")),
+        ))(input)
+    }
+}
+impl std::fmt::Display for AttrDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttrDirective::LabelList => write!(f, "attr.label_list"),
+            AttrDirective::StringList => write!(f, "attr.string_list"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum BinaryRefDirective {
     GenerateBinary,
 }
@@ -136,6 +160,12 @@ pub struct ManualRefConfig {
     pub target_value: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct AttrStringListConfig {
+    pub attr_name: String,
+    pub values: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BinaryRefAndPath {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -157,6 +187,7 @@ pub enum Directive {
     EntityDirective(EntityDirectiveConfig),
     ManualRef(ManualRefConfig),
     BinaryRef(BinaryRefConfig),
+    AttrStringList(AttrStringListConfig),
 }
 
 impl Directive {
@@ -187,7 +218,7 @@ impl Directive {
         let (input, d) = nom::error::context(
             "parsing_entity_block",
             nom::bytes::complete::take_while1(|e| {
-                !(e == ' ' || e == ',' || e == ':' || e == ' ' || e == '{' || e == '}')
+                !(e == ' ' || e == ',' || e == ' ' || e == '{' || e == '}')
             }),
         )(input)?;
         Ok((input, d.to_string()))
@@ -297,12 +328,9 @@ impl Directive {
         ))
     }
 
-    pub fn parse_entity_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    fn parse_key_string_list<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
-    ) -> IResult<&'a str, Directive, E> {
-        // link:com.foo.bar.baz -> {org.example.Z, org.ppp.QQQ,org.eee.lll.QQQ}
-        let (input, src_d) = EntityDirective::parse(input)?;
-        let (input, _) = tuple((space0, nom::bytes::complete::tag(":"), space0))(input)?;
+    ) -> IResult<&'a str, (String, Vec<String>), E> {
         let (input, src_entity) = Directive::entity_block(input)?;
         let (input, _) = tuple((space0, nom::bytes::complete::tag("->"), space0))(input)?;
 
@@ -329,12 +357,39 @@ impl Directive {
 
         let (input, _) = nom::combinator::eof(input)?;
 
+        Ok((input, (src_entity, dest_entities)))
+    }
+
+    pub fn parse_entity_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, Directive, E> {
+        // link:com.foo.bar.baz -> {org.example.Z, org.ppp.QQQ,org.eee.lll.QQQ}
+        let (input, src_d) = EntityDirective::parse(input)?;
+        let (input, _) = tuple((space0, nom::bytes::complete::tag(":"), space0))(input)?;
+        let (input, (src_entity, dest_entities)) = Self::parse_key_string_list(input)?;
+
         Ok((
             input,
             Directive::EntityDirective(EntityDirectiveConfig {
                 command: src_d,
                 act_on: src_entity,
                 pointing_at: dest_entities,
+            }),
+        ))
+    }
+
+    fn parse_attr_string_list_directive<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, Directive, E> {
+        let (input, _) = AttrDirective::parse(input)?;
+        let (input, _) = tuple((space0, nom::bytes::complete::tag(":"), space0))(input)?;
+        let (input, (key, values)) = Self::parse_key_string_list(input)?;
+
+        Ok((
+            input,
+            Directive::AttrStringList(AttrStringListConfig {
+                attr_name: key,
+                values: values,
             }),
         ))
     }
@@ -348,12 +403,34 @@ impl Directive {
             Directive::parse_entity_directive,
             Directive::parse_manual_ref_directive,
             Directive::parse_binary_ref_directive,
+            Directive::parse_attr_string_list_directive,
         ))(input)
     }
 }
 
 impl std::fmt::Display for Directive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn write_string_list(
+            f: &mut std::fmt::Formatter<'_>,
+            command: &String,
+            name: &String,
+            values: &Vec<String>,
+        ) -> std::fmt::Result {
+            write!(f, "{}:", command)?;
+            write!(f, "{}", name)?;
+            write!(f, " -> {{")?;
+            let mut first = true;
+            for e in values.iter() {
+                if !first {
+                    write!(f, ",")?;
+                }
+                first = false;
+                write!(f, "{}", e)?;
+            }
+            write!(f, " }}")?;
+            Ok(())
+        }
+
         match self {
             Directive::ManualRef(ManualRefConfig {
                 command,
@@ -381,18 +458,10 @@ impl std::fmt::Display for Directive {
                 act_on,
                 pointing_at,
             }) => {
-                write!(f, "{}:", command)?;
-                write!(f, "{}", act_on)?;
-                write!(f, " -> {{")?;
-                let mut first = true;
-                for e in pointing_at.iter() {
-                    if !first {
-                        write!(f, ",")?;
-                    }
-                    first = false;
-                    write!(f, "{}", e)?;
-                }
-                write!(f, " }}")?;
+                write_string_list(f, &command.to_string(), act_on, pointing_at)?;
+            }
+            Directive::AttrStringList(AttrStringListConfig { attr_name, values }) => {
+                write_string_list(f, &"attr.string_list".to_string(), attr_name, values)?;
             }
         }
         Ok(())
@@ -461,6 +530,22 @@ mod tests {
             Directive::ManualRef(ManualRefConfig {
                 command: ManualRefDirective::DataRef,
                 target_value: "//x/y/z:artifact".to_string()
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("attr.label_list: plugins -> { //x/y/z:artifact }"),
+            Directive::AttrStringList(AttrStringListConfig {
+                attr_name: "plugins".to_string(),
+                values: vec!["//x/y/z:artifact".to_string()]
+            })
+        );
+
+        assert_eq!(
+            parse_to_directive("attr.string_list: plugins -> { //x/y/z:artifact, bar }"),
+            Directive::AttrStringList(AttrStringListConfig {
+                attr_name: "plugins".to_string(),
+                values: vec!["//x/y/z:artifact".to_string(), "bar".to_string()]
             })
         );
 

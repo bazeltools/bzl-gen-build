@@ -300,10 +300,7 @@ async fn print_file(
     };
 
     for (k, lst) in build_config.extra_key_to_list.iter() {
-        extra_kv_pairs
-            .entry(k.clone())
-            .or_default()
-            .extend(lst.iter().cloned())
+        append_key_values(&mut extra_kv_pairs, &k, &lst);
     }
 
     for directive in project_conf
@@ -335,6 +332,9 @@ async fn print_file(
                                 t.push(manual_ref.target_value.clone())
                             }
                         },
+                        Directive::AttrStringList(attr) => {
+                            append_key_values(&mut extra_kv_pairs, &attr.attr_name, &attr.values);
+                        }
                     }
                 }
             }
@@ -450,6 +450,28 @@ async fn print_file(
 
     apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
 
+    fn append_key_values(
+        extra_kv_pairs: &mut HashMap<String, Vec<String>>,
+        key: &String,
+        values: &Vec<String>,
+    ) {
+        extra_kv_pairs
+            .entry(key.clone())
+            .or_default()
+            .extend(values.iter().cloned());
+    }
+
+    fn apply_attr_string_lists(
+        extra_kv_pairs: &mut HashMap<String, Vec<String>>,
+        node_metadata: &GraphNodeMetadata,
+    ) {
+        for attr in node_metadata.attr_string_lists.iter() {
+            append_key_values(extra_kv_pairs, &attr.attr_name, &attr.values);
+        }
+    }
+
+    apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
+
     if use_rglob {
         let target = TargetEntry {
             name: target_name.clone(),
@@ -512,6 +534,7 @@ async fn print_file(
                 };
 
                 apply_manual_refs(&mut extra_kv_pairs, metadata);
+                apply_attr_string_lists(&mut extra_kv_pairs, metadata);
 
                 let mut t = TargetEntries {
                     entries: vec![filegroup_target],
