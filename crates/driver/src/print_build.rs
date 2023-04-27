@@ -235,10 +235,8 @@ async fn print_file(
     let (module_config, path_type, _matched_prefix) = if let Some(a) = module_config {
         a
     } else {
-        return Err(anyhow!(
-            "Unable to find any matching configuration for {}",
-            element
-        ));
+        let empty_files = Vec::default();
+        return Ok(empty_files)
     };
     let mut emitted_files = Vec::default();
 
