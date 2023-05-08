@@ -7,10 +7,8 @@ pub struct FileNameError {
 }
 
 impl FileNameError {
-    fn new(msg: &str) -> FileNameError {
-        FileNameError {
-            message: msg.to_string(),
-        }
+    pub fn new(msg: String) -> FileNameError {
+        FileNameError { message: msg }
     }
 }
 

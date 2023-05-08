@@ -1,15 +1,16 @@
+use crate::errors::FileNameError;
+use serde::{Deserialize, Serialize};
+use serde_json::Result as SerdeJsonResult;
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::io::prelude::*;
-use std::fs::File;
 use std::error::Error;
 use std::fmt;
-use zip::{ZipWriter, CompressionMethod, write::FileOptions};
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::PathBuf;
 use zip::read::ZipArchive;
-use serde::{Serialize, Deserialize};
-use serde_json::Result as SerdeJsonResult;
+use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 
-mod errors;
+pub mod errors;
 
 #[derive(Serialize, Deserialize)]
 struct DataBlock {
@@ -32,20 +33,25 @@ fn not_in_meta(file_name: &str) -> bool {
     !file_name.starts_with("META-INF")
 }
 
-fn ends_class(file_name: &str) -> bool {
+fn ends_in_class(file_name: &str) -> bool {
     file_name.ends_with(".class")
 }
 
 fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameError> {
-    if non_anon(file_name) && not_in_meta(file_name) && ends_class(file_name) {
+    if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
         let base = file_name
             .strip_suffix(".class")
-            .ok_or_else(|| FileNameError::new("Failed to strip .class suffix"))?
+            .ok_or_else(|| {
+                FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
+            })?
             .strip_suffix("$")
-            .ok_or_else(|| FileNameError::new("Failed to strip $ suffix"))?;
+            .ok_or_else(|| {
+                FileNameError::new(format!("Failed to strip $ suffix for {}", file_name))
+            })?;
         let dotted = base.replace("/$", "/").replace("$", ".").replace("/", ".");
+        let replacePkg = dotted.replace(".package", "");
         if dotted.contains(".package") {
-            Ok(vec![dotted.clone(), dotted.replace(".package", "")])
+            Ok(vec![dotted, replacePkg])
         } else {
             Ok(vec![dotted])
         }
@@ -54,40 +60,67 @@ fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameErro
     }
 }
 
-// fn filter_prefixes(label: &str, classes: Vec<String>, label_to_allowed_prefixes: &HashMap<String, Vec<String>>) -> Vec<String> {
-//     match label_to_allowed_prefixes.get(label) {
-//         Some(prefix_list) => {
-//             classes.into_iter()
-//                 .filter(|c| prefix_list.iter().any(|prefix| c.starts_with(prefix)))
-//                 .collect()
-//         }
-//         None => classes
-//     }
-// }
+fn read_zip_archive(input_jar: &PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
+    let file = File::open(input_jar)?;
+    let mut archive = ZipArchive::new(file)?;
 
-// fn process_input(label: &str, input_jar: &PathBuf, relative_path: &str, label_to_allowed_prefixes: &HashMap<String, Vec<String>>) -> Result<TargetDescriptor> {
-//     let file = File::open(input_jar).unwrap();
-//     let mut archive = ZipArchive::new(file).unwrap();
-//     let raw_classes: Vec<String> = archive.file_names()
-//         .flat_map(file_name_to_class_names)
-//         .collect();
+    let mut result = Vec::new();
+    for file_name in archive.file_names() {
+        match file_name_to_class_names(file_name) {
+            Ok(class_names) => result.extend(class_names),
+            Err(err) => return Err(Box::new(err)),
+        }
+    }
 
-//     let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
-//     let target_descriptor = TargetDescriptor {
-//         label_or_repo_path: label.to_string(),
-//         data_blocks: vec![DataBlock {
-//             entity_path: relative_path.to_string(),
-//             defs: classes.into_iter().sorted().dedup().collect(),
-//             refs: vec![],
-//         }],
-//     };
+    Ok(result)
+}
 
-//     Ok(target_descriptor)
-// }
+fn filter_prefixes(
+    label: &str,
+    classes: Vec<String>,
+    label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
+) -> Vec<String> {
+    match label_to_allowed_prefixes.get(label) {
+        Some(prefix_vec) => classes
+            .into_iter()
+            .filter(|c| prefix_vec.iter().any(|prefix| c.starts_with(prefix)))
+            .collect(),
+        None => classes,
+    }
+}
 
-// fn emit_result(target_descriptor: &TargetDescriptor, output_path: &PathBuf) -> Result<()> {
-//     let json = serde_json::to_string_pretty(target_descriptor)?;
-//     let mut file = File::create(output_path)?;
-//     file.write_all(json.as_bytes())?;
-//     Ok(())
-// }
+fn sort_and_deduplicate(vec: &Vec<String>) -> Vec<String> {
+    let mut v = vec.clone();
+    v.sort();
+    v.dedup();
+    v
+}
+
+fn process_input(
+    label: &str,
+    input_jar: &PathBuf,
+    relative_path: &str,
+    label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
+) -> Result<TargetDescriptor, Box<dyn Error>> {
+    let raw_classes = read_zip_archive(input_jar)?;
+    let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
+
+    Ok(TargetDescriptor {
+        label_or_repo_path: label.to_string(),
+        data_blocks: vec![DataBlock {
+            entity_path: relative_path.to_string(),
+            defs: sort_and_deduplicate(&classes),
+            refs: vec![],
+        }],
+    })
+}
+
+fn emit_result(
+    target_descriptor: &TargetDescriptor,
+    output_path: &PathBuf,
+) -> Result<(), Box<dyn Error>> {
+    let json = serde_json::to_string_pretty(target_descriptor)?;
+    let mut file = File::create(output_path)?;
+    file.write_all(json.as_bytes())?;
+    Ok(())
+}
