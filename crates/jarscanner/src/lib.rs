@@ -1,14 +1,13 @@
 use crate::errors::FileNameError;
 use serde::{Deserialize, Serialize};
-use serde_json::Result as SerdeJsonResult;
+
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt;
+
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 use zip::read::ZipArchive;
-use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 
 pub mod errors;
 
@@ -20,7 +19,7 @@ struct DataBlock {
 }
 
 #[derive(Serialize, Deserialize)]
-struct TargetDescriptor {
+pub struct TargetDescriptor {
     label_or_repo_path: String,
     data_blocks: Vec<DataBlock>,
 }
@@ -49,9 +48,9 @@ fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameErro
                 FileNameError::new(format!("Failed to strip $ suffix for {}", file_name))
             })?;
         let dotted = base.replace("/$", "/").replace("$", ".").replace("/", ".");
-        let replacePkg = dotted.replace(".package", "");
+        let replace_pkg = dotted.replace(".package", "");
         if dotted.contains(".package") {
-            Ok(vec![dotted, replacePkg])
+            Ok(vec![dotted, replace_pkg])
         } else {
             Ok(vec![dotted])
         }
@@ -62,7 +61,7 @@ fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameErro
 
 fn read_zip_archive(input_jar: &PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
     let file = File::open(input_jar)?;
-    let mut archive = ZipArchive::new(file)?;
+    let archive = ZipArchive::new(file)?;
 
     let mut result = Vec::new();
     for file_name in archive.file_names() {
@@ -96,7 +95,7 @@ fn sort_and_deduplicate(vec: &Vec<String>) -> Vec<String> {
     v
 }
 
-fn process_input(
+pub fn process_input(
     label: &str,
     input_jar: &PathBuf,
     relative_path: &str,
@@ -115,7 +114,7 @@ fn process_input(
     })
 }
 
-fn emit_result(
+pub fn emit_result(
     target_descriptor: &TargetDescriptor,
     output_path: &PathBuf,
 ) -> Result<(), Box<dyn Error>> {

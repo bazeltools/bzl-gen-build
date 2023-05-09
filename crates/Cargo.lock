@@ -233,6 +233,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
+ "tokio",
  "zip",
 ]
 
