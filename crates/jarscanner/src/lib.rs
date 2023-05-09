@@ -1,7 +1,6 @@
 use crate::errors::FileNameError;
-use serde::{Deserialize, Serialize};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 
 use std::fs::File;
@@ -9,20 +8,9 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use zip::read::ZipArchive;
 
+use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
+
 pub mod errors;
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, Eq)]
-struct DataBlock {
-    entity_path: String,
-    defs: Vec<String>,
-    refs: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, Eq)]
-pub struct TargetDescriptor {
-    label_or_repo_path: String,
-    data_blocks: Vec<DataBlock>,
-}
 
 fn non_anon(file_name: &str) -> bool {
     !((file_name.contains("/$") && file_name.contains("$/")) || file_name.contains("$$anon"))
@@ -58,14 +46,14 @@ fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameErro
     }
 }
 
-fn read_zip_archive(input_jar: &PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
+fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, Box<dyn Error>> {
     let file = File::open(input_jar)?;
     let archive = ZipArchive::new(file)?;
 
-    let mut result = Vec::new();
+    let mut result = HashSet::new();
     for file_name in archive.file_names() {
         match file_name_to_class_names(file_name) {
-            Ok(class_names) => result.extend(class_names),
+            Ok(class_names) => result.extend(class_names.into_iter()),
             Err(err) => return Err(Box::new(err)),
         }
     }
@@ -75,23 +63,16 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<Vec<String>, Box<dyn Error>> 
 
 fn filter_prefixes(
     label: &str,
-    classes: Vec<String>,
+    classes: HashSet<String>,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
-) -> Vec<String> {
+) -> HashSet<String> {
     match label_to_allowed_prefixes.get(label) {
-        Some(prefix_vec) => classes
+        Some(prefix_set) => classes
             .into_iter()
-            .filter(|c| prefix_vec.iter().any(|prefix| c.starts_with(prefix)))
+            .filter(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix)))
             .collect(),
         None => classes,
     }
-}
-
-fn sort_and_deduplicate(vec: &Vec<String>) -> Vec<String> {
-    let mut v = vec.clone();
-    v.sort();
-    v.dedup();
-    v
 }
 
 pub fn process_input(
@@ -99,22 +80,23 @@ pub fn process_input(
     input_jar: &PathBuf,
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
-) -> Result<TargetDescriptor, Box<dyn Error>> {
+) -> Result<ExtractedData, Box<dyn Error>> {
     let raw_classes = read_zip_archive(input_jar)?;
     let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
 
-    Ok(TargetDescriptor {
+    Ok(ExtractedData {
         label_or_repo_path: label.to_string(),
         data_blocks: vec![DataBlock {
             entity_path: relative_path.to_string(),
-            defs: sort_and_deduplicate(&classes),
-            refs: vec![],
+            defs: classes,
+            refs: HashSet::new(),
+            bzl_gen_build_commands: HashSet::new(),
         }],
     })
 }
 
 pub fn emit_result(
-    target_descriptor: &TargetDescriptor,
+    target_descriptor: &ExtractedData,
     output_path: &PathBuf,
 ) -> Result<(), Box<dyn Error>> {
     let json = serde_json::to_string_pretty(target_descriptor)?;
@@ -181,20 +163,29 @@ mod tests {
             vec!["com.netflix.iceberg.".to_string()],
         );
 
+        let mut classes = HashSet::new();
+        classes.insert("bar".to_string());
+        let expected = classes.clone();
+
         assert_eq!(
-            filter_prefixes("foo", vec!["bar".to_string()], &label_to_allowed_prefixes),
-            vec!["bar"]
+            filter_prefixes("foo", classes, &label_to_allowed_prefixes),
+            expected
         );
+
+        let mut filtered_classes = HashSet::new();
+        filtered_classes.insert("com.netflix.iceberg.Foo".to_string());
+        filtered_classes.insert("com.google.bar".to_string());
+
+        let mut expected = HashSet::new();
+        expected.insert("com.netflix.iceberg.Foo".to_string());
+
         assert_eq!(
             filter_prefixes(
                 "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
-                vec![
-                    "com.netflix.iceberg.Foo".to_string(),
-                    "com.google.bar".to_string()
-                ],
+                filtered_classes,
                 &label_to_allowed_prefixes
             ),
-            vec!["com.netflix.iceberg.Foo"]
+            expected
         );
     }
 }

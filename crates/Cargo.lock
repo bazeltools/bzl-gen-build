@@ -230,6 +230,7 @@ dependencies = [
 name = "bzl_gen_jarscanner"
 version = "0.1.0"
 dependencies = [
+ "bzl_gen_build_shared_types",
  "clap",
  "serde",
  "serde_json",
