@@ -227,9 +227,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bzl_gen_jar_scanner"
+name = "bzl_gen_jarscanner"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "serde",
  "serde_json",
  "zip",
