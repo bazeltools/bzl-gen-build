@@ -11,14 +11,14 @@ use zip::read::ZipArchive;
 
 pub mod errors;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, Eq)]
 struct DataBlock {
     entity_path: String,
     defs: Vec<String>,
     refs: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, Eq)]
 pub struct TargetDescriptor {
     label_or_repo_path: String,
     data_blocks: Vec<DataBlock>,
@@ -38,16 +38,15 @@ fn ends_in_class(file_name: &str) -> bool {
 
 fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameError> {
     if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
-        let base = file_name
-            .strip_suffix(".class")
-            .ok_or_else(|| {
-                FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
-            })?
-            .strip_suffix("$")
-            .ok_or_else(|| {
-                FileNameError::new(format!("Failed to strip $ suffix for {}", file_name))
-            })?;
-        let dotted = base.replace("/$", "/").replace("$", ".").replace("/", ".");
+        let class_suffix = file_name.strip_suffix(".class").ok_or_else(|| {
+            FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
+        })?;
+        let final_suffix = class_suffix.strip_suffix("$").unwrap_or(class_suffix);
+
+        let dotted = final_suffix
+            .replace(r"/$", r"/")
+            .replace("$", ".")
+            .replace(r"/", ".");
         let replace_pkg = dotted.replace(".package", "");
         if dotted.contains(".package") {
             Ok(vec![dotted, replace_pkg])
@@ -122,4 +121,80 @@ pub fn emit_result(
     let mut file = File::create(output_path)?;
     file.write_all(json.as_bytes())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_transform_path_to_jar() {
+        let empty_vec: Vec<String> = vec![];
+
+        // Files that should be ignored
+        assert_eq!(
+            file_name_to_class_names("META-INF/services/java.time.chrono.Chronology").unwrap(),
+            empty_vec
+        );
+        assert_eq!(
+            file_name_to_class_names("foo/bar/baz/doo.txt").unwrap(),
+            empty_vec
+        );
+
+        // Anon classes that should be ignored
+        assert_eq!(
+            file_name_to_class_names("scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class")
+                .unwrap(),
+            empty_vec
+        );
+        assert_eq!(
+            file_name_to_class_names(
+                "autovalue/shaded/com/google$/common/reflect/$Reflection.class"
+            )
+            .unwrap(),
+            empty_vec
+        );
+
+        // We should pick up classes
+        assert_eq!(
+            file_name_to_class_names("software/amazon/eventstream/HeaderValue$LongValue.class")
+                .unwrap(),
+            vec!["software.amazon.eventstream.HeaderValue.LongValue"]
+        );
+
+        // We should pick up package objects
+        assert_eq!(
+            file_name_to_class_names("scala/runtime/package$.class").unwrap(),
+            vec!["scala.runtime.package", "scala.runtime"]
+        );
+        assert_eq!(
+            file_name_to_class_names("scala/runtime/package.class").unwrap(),
+            vec!["scala.runtime.package", "scala.runtime"]
+        );
+    }
+
+    #[test]
+    fn test_filter_prefixes() {
+        let mut label_to_allowed_prefixes = HashMap::new();
+        label_to_allowed_prefixes.insert(
+            "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar".to_string(),
+            vec!["com.netflix.iceberg.".to_string()],
+        );
+
+        assert_eq!(
+            filter_prefixes("foo", vec!["bar".to_string()], &label_to_allowed_prefixes),
+            vec!["bar"]
+        );
+        assert_eq!(
+            filter_prefixes(
+                "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
+                vec![
+                    "com.netflix.iceberg.Foo".to_string(),
+                    "com.google.bar".to_string()
+                ],
+                &label_to_allowed_prefixes
+            ),
+            vec!["com.netflix.iceberg.Foo"]
+        );
+    }
 }

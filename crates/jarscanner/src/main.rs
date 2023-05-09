@@ -29,11 +29,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let output_path = PathBuf::from(opt.out);
     let input_jar_path = PathBuf::from(opt.input_jar);
 
-    let mut label_to_allowed_prefixes = HashMap::new();
-    label_to_allowed_prefixes.insert(
-        "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_11//:jar".to_string(),
-        vec!["com.netflix.iceberg.".to_string()],
-    );
+    let label_to_allowed_prefixes = HashMap::new();
+    // Insert any prefixes you want to allow here. For example:
+    // label_to_allowed_prefixes.insert(
+    //     "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar".to_string(),
+    //     vec!["com.netflix.iceberg.".to_string()],
+    // );
 
     let target_descriptor = jarscanner::process_input(
         &opt.label,
