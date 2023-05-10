@@ -12,12 +12,13 @@ use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
 
 pub mod errors;
 
+// This is to filter Scala-generated classes that shouldn't be referenced by users
 fn non_anon(file_name: &str) -> bool {
-    !((file_name.contains("/$") && file_name.contains("$/")) || file_name.contains("$$anon"))
+    !((file_name.contains(r"/$") && file_name.contains(r"$/")) || file_name.contains("$$anon"))
 }
 
 fn not_in_meta(file_name: &str) -> bool {
-    !file_name.starts_with("META-INF")
+    !file_name.starts_with(r"META-INF/")
 }
 
 fn ends_in_class(file_name: &str) -> bool {
@@ -117,6 +118,12 @@ mod tests {
         assert_eq!(
             file_name_to_class_names("META-INF/services/java.time.chrono.Chronology").unwrap(),
             empty_vec
+        );
+        // Make sure we're respecting that slash
+        assert_eq!(
+            file_name_to_class_names("META-INFO/services/java.time.chrono.Chronology.class")
+                .unwrap(),
+            vec!["META-INFO.services.java.time.chrono.Chronology"]
         );
         assert_eq!(
             file_name_to_class_names("foo/bar/baz/doo.txt").unwrap(),

@@ -11,23 +11,20 @@ use bzl_gen_jarscanner as jarscanner;
 #[command(about = "Jar to containing classes tool", long_about = None)]
 struct Opt {
     #[arg(long)]
-    out: String,
+    out: PathBuf,
 
     #[arg(long)]
     label: String,
 
     #[arg(long)]
-    input_jar: String,
+    input_jar: PathBuf,
 
     #[arg(long)]
     relative_path: String,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
-    let output_path = PathBuf::from(opt.out);
-    let input_jar_path = PathBuf::from(opt.input_jar);
 
     let label_to_allowed_prefixes = HashMap::new();
     // Insert any prefixes you want to allow here. For example:
@@ -38,10 +35,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let target_descriptor = jarscanner::process_input(
         &opt.label,
-        &input_jar_path,
+        &opt.input_jar,
         &opt.relative_path,
         &label_to_allowed_prefixes,
     )?;
-    jarscanner::emit_result(&target_descriptor, &output_path)?;
+    jarscanner::emit_result(&target_descriptor, &opt.out)?;
     Ok(())
 }
