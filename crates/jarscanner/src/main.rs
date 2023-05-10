@@ -1,4 +1,5 @@
 use clap::Parser;
+use serde_json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
@@ -21,17 +22,19 @@ struct Opt {
 
     #[arg(long)]
     relative_path: String,
+
+    #[arg(long)]
+    label_to_allowed_prefixes: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
 
-    let label_to_allowed_prefixes = HashMap::new();
-    // Insert any prefixes you want to allow here. For example:
-    // label_to_allowed_prefixes.insert(
-    //     "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar".to_string(),
-    //     vec!["com.netflix.iceberg.".to_string()],
-    // );
+    let label_to_allowed_prefixes: HashMap<String, Vec<String>> =
+        match opt.label_to_allowed_prefixes {
+            Some(lp) => serde_json::from_str(&lp)?,
+            None => HashMap::new(),
+        };
 
     let target_descriptor = jarscanner::process_input(
         &opt.label,
