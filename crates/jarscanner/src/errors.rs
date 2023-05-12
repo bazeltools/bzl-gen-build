@@ -23,3 +23,32 @@ impl Error for FileNameError {
         &self.message
     }
 }
+
+pub struct LabelToAllowedPrefixesError {
+    pub json_deser_error: String,
+}
+
+impl LabelToAllowedPrefixesError {
+    fn write_error_msg(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Error parsing the JSON for --label-to-allowed-prefixes argument: {}",
+            self.json_deser_error
+        )
+    }
+}
+
+impl fmt::Display for LabelToAllowedPrefixesError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.write_error_msg(f)
+    }
+}
+
+// The Result that gets returned from the `main` entrypoint is going to use Debug, not Display, so we want to override this
+impl fmt::Debug for LabelToAllowedPrefixesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.write_error_msg(f)
+    }
+}
+
+impl Error for LabelToAllowedPrefixesError {}
