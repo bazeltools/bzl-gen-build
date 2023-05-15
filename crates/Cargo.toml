@@ -4,5 +4,6 @@ members = [
     "driver",
     "python_extractor",
     "python_utilities",
-    "shared_types"
+    "shared_types",
+    "jarscanner"
 ]
