@@ -61,7 +61,13 @@ object JavaSourceEntityExtractor {
 
     // TODO there needs to be some way to configure this
     val generators: Set[String] =
-      Set("InputTransformDef", "FeatureEncoderDef", "DataTransformDef", "TensorEncoderDef", "InputSelectorDef")
+      Set(
+        "InputTransformDef",
+        "FeatureEncoderDef",
+        "DataTransformDef",
+        "TensorEncoderDef",
+        "InputSelectorDef"
+      )
 
     val topLevelDefsTypes: SortedSet[Entity] =
       compUnit
