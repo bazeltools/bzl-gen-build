@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.72"
 tokio = { version = "1.29.1", features = ["full"] }
-clap = { version = "4.3.11", features = ["derive"] }
+clap = { version = "4.3.12", features = ["derive"] }
 serde = { version = "1.0.171", features = ["derive"] }
 serde_json = "1.0.102"
 walkdir = "2.3.3"
