@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.71"
+anyhow = "1.0.72"
 tokio = { version = "1.29.1", features = ["full"] }
 clap = { version = "4.3.11", features = ["derive"] }
 serde = { version = "1.0.168", features = ["derive"] }
