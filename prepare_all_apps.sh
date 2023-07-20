@@ -1,6 +1,9 @@
 #!/bin/bash -ex
 
-if [ -n "$MACOS_ARM64_BUILD" ]; then
+if [[ "$(uname -s)" == "Linux" ]]; then
+    export CARGO_EXTRA_ARGS="--target=x86_64-unknown-linux-musl"
+    export RUST_TARGET_DIR="target/x86_64-unknown-linux-musl/release"
+elif [[ -n "$MACOS_ARM64_BUILD" ]]; then
     export SDKROOT=$(xcrun -sdk macosx --show-sdk-path)
     export MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version)
     export CARGO_EXTRA_ARGS="--target=aarch64-apple-darwin"
