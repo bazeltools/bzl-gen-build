@@ -123,12 +123,16 @@ async fn main() -> Result<()> {
 }
 
 fn expand_path_to_defs_from_offset(from_given_path: &str, path: &str) -> Vec<String> {
-    if let Some(rem) = path.strip_prefix(from_given_path) {
+    if let Some(rem0) = path.strip_prefix(from_given_path) {
+        let rem = match rem0.strip_prefix("site-packages/") {
+            Some(x) => x,
+            None    => rem0
+        };
         if let Some(e) = rem.strip_suffix(".py") {
             let targ = e.replace('/', ".");
 
             if let Some(p) = targ.strip_suffix(".__init__") {
-                return vec![targ.clone(), p.to_string()];
+                return vec![p.to_string(), targ.clone()];
             } else {
                 return vec![targ];
             }
@@ -184,6 +188,18 @@ mod tests {
 
         assert_eq!(
             expand_path_to_defs("/Users/foo/bar/src/main/python/blah/src/main/ppp.py"),
+            expected
+        );
+    }
+
+    #[test]
+    fn expand_site_packages_path_to_defs_test() {
+        let mut expected = vec!["pytz", "pytz.__init__"];
+        expected.sort();
+        expected.dedup();
+
+        assert_eq!(
+            expand_path_to_defs_from_offset("/tmp/aaa/", "/tmp/aaa/site-packages/pytz/__init__.py"),
             expected
         );
     }

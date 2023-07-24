@@ -26,7 +26,7 @@ if [ ! -d "$PREPARE_ALL_OUTPUT_DIR" ]; then
     mkdir -p $PREPARE_ALL_OUTPUT_DIR
 fi
 
-echo "Running scala and python generator building"
+echo "running Scala and Python generator building"
 OUTPUT_DIR=$PREPARE_ALL_OUTPUT_DIR language_generators/scala-defref-extractor/build_native.sh
 
 cd crates
@@ -45,4 +45,4 @@ exports_files(["WORKSPACE", "python-entity-extractor"])
 EOF
 
 
-echo "Wrote all outputs to $PREPARE_ALL_OUTPUT_DIR" 1>&2
+echo "wrote all outputs to $PREPARE_ALL_OUTPUT_DIR" 1>&2

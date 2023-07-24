@@ -1,0 +1,26 @@
+{
+    "configurations": {
+      "python": {
+        "file_extensions": [
+          "py"
+        ],
+        "build_config": {
+          "main": {
+            "headers": [],
+            "function_name": "py_library"
+          },
+          "test": {
+            "headers": [],
+            "function_name": "py_test"
+          }
+        },
+        "main_roots": [
+          "src/main/python"
+        ],
+        "test_roots": [
+          "src/test/python"
+        ],
+        "path_directives": []
+      }
+    }
+  }

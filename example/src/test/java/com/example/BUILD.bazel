@@ -1,0 +1,8 @@
+java_test(
+    name = "Test1",
+    srcs = ["Test1.java"],
+    deps = [
+        "//src/main/protos/com/example:example_java",
+        "//src/main/protos/com/example/foo:foo_java",
+    ],
+)

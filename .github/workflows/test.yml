@@ -8,12 +8,22 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-latest, ubuntu-latest]
         include:
           - os: macos-latest
             platform: macos
+            jobtype: 1
+          - os: macos-latest
+            platform: macos
+            jobtype: 3
           - os: ubuntu-latest
             platform: linux
+            jobtype: 1
+          - os: ubuntu-latest
+            platform: linux
+            jobtype: 2
+          - os: ubuntu-latest
+            platform: linux
+            jobtype: 3
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -33,7 +43,18 @@ jobs:
           distribution: temurin
           java-version: 8
           cache: sbt
-      - run: cd crates; cargo test --all-features
-      - run: cd crates; cargo test
-      - run: cd language_generators/scala-defref-extractor; ./sbt "test; scalafmtCheckAll"
-      - run: ./prepare_all_apps.sh
+      - name: Bazel cache
+        uses: actions/cache@v3
+        with:
+          path: "/home/runner/.cache/bazel"
+          key: bazel-${{ hashFiles('**/.bazelrc', '**/.bazeliskrc', '**/WORKSPACE', '**/WORKSPACE.bazel', '**/MODULE.bazel') }}
+      - if: ${{ matrix.jobtype == 1 }}
+        run: cd crates; cargo test --all-features
+      - if: ${{ matrix.jobtype == 1 }}
+        run: cd crates; cargo test
+      - if: ${{ matrix.jobtype == 2 }}
+        run: cd language_generators/scala-defref-extractor; ./sbt "test; scalafmtCheckAll"
+      - if: ${{ matrix.jobtype == 3 }}
+        run: |
+          ./prepare_all_apps.sh
+          .github/ci_scripts/integration_test.sh

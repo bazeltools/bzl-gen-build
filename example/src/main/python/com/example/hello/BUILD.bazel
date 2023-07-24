@@ -1,0 +1,2 @@
+filegroup(name='hello_files', srcs=glob(include=['**/*.py']), visibility=['//visibility:public'])
+py_library(name='hello', srcs=[':hello_files'], deps=['@@rules_python~0.24.0~pip~pip_39_pandas//:pkg'], visibility=['//visibility:public'])

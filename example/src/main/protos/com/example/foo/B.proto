@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package com.example.foo;
+
+option java_multiple_files = true;
+
+import "src/main/protos/com/example/A.proto";
+
+message B {
+  A a = 1;
+}
