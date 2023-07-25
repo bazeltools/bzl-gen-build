@@ -1,0 +1,6 @@
+load('@rules_proto//proto:defs.bzl', 'proto_library')
+load('@rules_python//python:proto.bzl', 'py_proto_library')
+filegroup(name='example_files', srcs=glob(include=['**/*.proto']), visibility=['//visibility:public'])
+proto_library(name='example', srcs=[':example_files'], deps=[], visibility=['//visibility:public'])
+java_proto_library(name='example_java', deps=[':example'], visibility=['//visibility:public'])
+py_proto_library(name='example_py', deps=[':example'], visibility=['//visibility:public'])

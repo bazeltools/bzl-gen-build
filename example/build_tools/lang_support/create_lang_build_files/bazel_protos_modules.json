@@ -1,0 +1,48 @@
+{
+    "configurations": {
+      "protos": {
+        "file_extensions": [
+          "proto"
+        ],
+        "build_config": {
+          "main": {
+            "headers": [
+              {
+                "load_from": "@rules_proto//proto:defs.bzl",
+                "load_value": "proto_library"
+              }
+            ],
+            "function_name": "proto_library"
+          },
+          "secondary_rules": {
+            "java": {
+              "headers": [],
+              "function_name": "java_proto_library",
+              "extra_key_to_list": {
+                "deps": [":${name}"]
+              }
+            },
+            "py": {
+              "headers": [
+                {
+                  "load_from": "@rules_python//python:proto.bzl",
+                  "load_value": "py_proto_library"
+                }
+              ],
+              "function_name": "py_proto_library",
+              "extra_key_to_list": {
+                "deps": [":${name}"]
+              }
+            }
+          }
+        },
+        "main_roots": [
+          "src/main/protos"
+        ],
+        "test_roots": [
+          "src/test/protos"
+        ],
+        "path_directives": []
+      }
+    }
+}

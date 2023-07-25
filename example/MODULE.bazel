@@ -1,0 +1,20 @@
+module(
+    name = "example",
+    version = "0.0.0",
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.4.1")
+bazel_dep(name = "rules_python", version = "0.24.0")
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    python_version = "3.9",
+)
+use_repo(python, "python_3_9", "python_versions")
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pip",
+    requirements_lock = "//:requirements_lock_3_9.txt",
+)
+use_repo(pip, "pip", "pip_39")
