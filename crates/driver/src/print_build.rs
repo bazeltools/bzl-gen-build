@@ -17,6 +17,7 @@ use futures::{stream, StreamExt};
 use ignore::WalkBuilder;
 use rustpython_parser::ast;
 
+use futures::Future;
 use tokio::sync::Semaphore;
 
 lazy_static::lazy_static! {
@@ -195,13 +196,18 @@ impl TargetEntries {
     }
 }
 
-async fn print_file(
+async fn generate_targets<F, R>(
     opt: &'static Opt,
     project_conf: &'static ProjectConf,
     graph_node: GraphNode,
-    concurrent_io_operations: &'static Semaphore,
     element: String,
-) -> Result<Vec<PathBuf>> {
+    emitted_files: &mut Vec<PathBuf>,
+    on_child: F
+) -> Result<TargetEntries>
+where
+    F: Fn(PathBuf, TargetEntries) -> R,
+    R: Future<Output = Result<i32>> + Send + 'static
+{
     let mut module_config: Option<(&ModuleConfig, &'static str, &'static str)> = None;
     for (_k, v) in project_conf.configurations.iter() {
         let paths = v
@@ -240,11 +246,8 @@ async fn print_file(
             element
         ));
     };
-    let mut emitted_files = Vec::default();
 
     let target_folder = opt.working_directory.join(&element);
-    let target_file = target_folder.join("BUILD.bazel");
-    emitted_files.push(target_file.clone());
     let target_name = target_folder
         .file_name()
         .unwrap()
@@ -471,7 +474,6 @@ async fn print_file(
     }
 
     apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
-
     if use_rglob {
         let target = TargetEntry {
             name: target_name.clone(),
@@ -542,14 +544,9 @@ async fn print_file(
 
                 apply_binaries(&mut t, metadata, module_config, &element)?;
 
-                let _handle = concurrent_io_operations.acquire().await?;
                 let sub_target = opt.working_directory.join(node).join("BUILD.bazel");
                 emitted_files.push(sub_target.clone());
-                tokio::fs::write(&sub_target, t.emit_build_file()?)
-                    .await
-                    .with_context(|| {
-                        format!("Attempting to write file data to {:?}", target_file)
-                    })?;
+                on_child(sub_target, t).await?;
             } else {
                 return Err(anyhow!("Unable to extract folder name for node: {}", node));
             }
@@ -567,16 +564,42 @@ async fn print_file(
                 .collect(),
             required_load,
             visibility: None,
-            srcs: Some(SrcType::List(parent_include_src)),
+            srcs: Some(SrcType::List(parent_include_src.clone())),
             target_type: Arc::new(build_config.function_name.clone()),
             extra_k_strs: Vec::default(),
         };
 
         t.entries.push(target);
     }
+    Ok(t)
+}
 
+// Performs the side effect of writing BUILD file
+async fn print_file(
+    opt: &'static Opt,
+    project_conf: &'static ProjectConf,
+    graph_node: GraphNode,
+    concurrent_io_operations: &'static Semaphore,
+    element: String,
+) -> Result<Vec<PathBuf>> {
+    let mut emitted_files: Vec<PathBuf> = Vec::default();
+    let target_folder = opt.working_directory.join(&element);
+    let target_file = target_folder.join("BUILD.bazel");
+    emitted_files.push(target_file.clone());
+    let t = generate_targets(
+        opt,
+        project_conf,
+        graph_node,
+        element,
+        &mut emitted_files,
+        |sub_target: PathBuf, t: TargetEntries| async move {
+            let _handle = concurrent_io_operations.acquire().await?;
+            tokio::fs::write(&sub_target.clone(), t.emit_build_file()?)
+                .await
+                .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            Ok(0)
+        }).await?;
     let handle = concurrent_io_operations.acquire().await?;
-
     tokio::fs::write(&target_file, t.emit_build_file()?)
         .await
         .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
@@ -677,6 +700,115 @@ pub async fn print_build(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Commands::PrintBuild;
+    use crate::build_config::{BuildConfig, BuildLoad, GrpBuildConfig};
+    use crate::build_graph::NodeType;
+
+    fn example_opt() -> Opt {
+        Opt {
+            input_path: PathBuf::new(),
+            working_directory: PathBuf::new(),
+            concurrent_io_operations: 8,
+            cache_path: PathBuf::new(),
+            command: PrintBuild(PrintBuildArgs {
+                graph_data: PathBuf::new()
+            }),
+        }
+    }
+
+    fn example_project_conf() -> ProjectConf {
+        ProjectConf {
+            configurations: HashMap::from([(
+                "protos".to_string(),
+                ModuleConfig {
+                    file_extensions: vec!["proto".to_string()],
+                    build_config: BuildConfig {
+                        main: Some(GrpBuildConfig {
+                            headers: vec![
+                                BuildLoad {
+                                    load_from: "@rules_proto//proto:defs.bzl".to_string(),
+                                    load_value: "proto_library".to_string(),
+                                }
+                            ],
+                            function_name: "proto_library".to_string(),
+                            extra_key_to_list: HashMap::default(),
+                            extra_key_to_value: HashMap::default()
+                        }),
+                        test: None,
+                        binary_application: None
+                    },
+                    main_roots: vec!["src/main/protos".to_string()],
+                    test_roots: vec!["src/test/protos".to_string()]
+                }
+            )]),
+            includes: vec![],
+            path_directives: vec![]
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_targets() -> Result<(), Box<dyn std::error::Error>> {
+        let mut build_graph =GraphNode::default();
+        build_graph.node_type = NodeType::RealNode;
+        test_generate_targets_base(
+            example_project_conf(),
+            build_graph,
+            "src/main/protos".to_string(),
+            2,
+            r#"load('@rules_proto//proto:defs.bzl', 'proto_library')
+
+filegroup(
+    name='protos_files',
+    srcs=glob(include=['**/*.proto']),
+    visibility=['//visibility:public']
+)
+
+proto_library(
+    name='protos',
+    srcs=[':protos_files'],
+    visibility=['//visibility:public']
+)
+        "#,
+        ).await
+    }
+
+    async fn test_generate_targets_base(
+        project_conf: ProjectConf,
+        build_graph: GraphNode,
+        element: String,
+        expected_target_count: usize,
+        expected_build_file: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut emitted_files: Vec<PathBuf> = Vec::default();
+        let opt = Box::leak(Box::new(example_opt()));
+        let boxed_project_conf = Box::leak(Box::new(project_conf));
+        let target_entries = generate_targets(
+            opt,
+            boxed_project_conf,
+            build_graph,
+            element,
+            &mut emitted_files,
+            |_sub_target: PathBuf, _t: TargetEntries| async move {
+                Ok(0)
+            }
+        ).await?;
+        assert_eq!(
+            target_entries.entries.len(),
+            expected_target_count
+        );
+        let generated_s = target_entries.emit_build_file()?;
+        let actual_parsed = PythonProgram::parse(generated_s.as_str(), "tmp.py")?;
+        let expected_parsed = {
+            let parsed = PythonProgram::parse(expected_build_file, "tmp.py").unwrap();
+            PythonProgram::parse(format!("{}", parsed).as_str(), "tmp.py").unwrap()
+        };
+        assert_eq!(
+            expected_parsed, actual_parsed,
+            "\n\nexpected:\n{}\n\nactual:\n{}\n",
+            expected_parsed, actual_parsed
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_simple_target_entry() {
