@@ -149,6 +149,7 @@ function run_system_apps() {
         --input-path $CFG \
         --working-directory $REPO_ROOT \
         --cache-path ${BZL_GEN_BUILD_CACHE_PATH} extract \
+        --extractor protos:${TOOLING_WORKING_DIRECTORY}/protos-entity-extractor \
         --extractor scala:${TOOLING_WORKING_DIRECTORY}/scala-entity-extractor \
         --external-generated-root ${TMP_WORKING_STATE}/external_files \
         --extractor java:${TOOLING_WORKING_DIRECTORY}/java-entity-extractor \

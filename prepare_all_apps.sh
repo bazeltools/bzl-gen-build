@@ -38,6 +38,9 @@ cp ${RUST_TARGET_DIR}/bzl_gen_build_driver $PREPARE_ALL_OUTPUT_DIR/system-driver
 rm -f  $PREPARE_ALL_OUTPUT_DIR/python-entity-extractor || true
 cp ${RUST_TARGET_DIR}/bzl_gen_python_extractor $PREPARE_ALL_OUTPUT_DIR/python-entity-extractor
 
+rm -f  $PREPARE_ALL_OUTPUT_DIR/protobuf-extractor || true
+cp ${RUST_TARGET_DIR}/bzl_gen_protobuf_extractor $PREPARE_ALL_OUTPUT_DIR/protos-entity-extractor
+
 echo "workspace(name = \"external_build_tooling_gen\")" > $PREPARE_ALL_OUTPUT_DIR/WORKSPACE
 
 cat > $PREPARE_ALL_OUTPUT_DIR/BUILD.bazel <<EOF

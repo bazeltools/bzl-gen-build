@@ -2,6 +2,7 @@
 
 members = [
     "driver",
+    "protobuf_extractor",
     "python_extractor",
     "python_utilities",
     "shared_types",
