@@ -102,7 +102,7 @@ pub struct PathMatcher {}
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     use crate::{
         build_config::{BuildConfig, GrpBuildConfig},
@@ -166,7 +166,8 @@ mod tests {
                                 extra_key_to_value: HashMap::default()
                             }),
                             test: None,
-                            binary_application: None
+                            binary_application: None,
+                            secondary_rules: BTreeMap::default()
                         },
                         main_roots: vec!["src/main/python".to_string()],
                         test_roots: vec!["src/test/python".to_string()]

@@ -474,6 +474,12 @@ where
     }
 
     apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
+    // before we give extra_kv_pairs away to make the main target,
+    // we need to clone deps here for a later use in secondaries.
+    let deps = extra_kv_pairs
+                .entry("deps".to_string())
+                .or_default()
+                .clone();
     if use_rglob {
         let target = TargetEntry {
             name: target_name.clone(),
@@ -571,6 +577,88 @@ where
 
         t.entries.push(target);
     }
+
+    fn apply_secondary_rules(
+        target_entries: &mut TargetEntries,
+        module_config: &ModuleConfig,
+        parent_target_name: &str,
+        parent_include_src: &Vec<String>,
+        parent_deps: &Vec<String>,
+    ) {
+        for (k, build_config) in module_config.build_config.secondary_rules.iter() {
+            let sec_target_name = format!("{}_{}", parent_target_name, k);
+            let mut required_load = HashMap::default();
+            let mut srcs = Option::default();
+            for h in build_config.headers.iter() {
+                required_load.insert(
+                    Arc::new(h.load_from.clone()),
+                    vec![Arc::new(h.load_value.clone())],
+                );
+            }
+            let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
+            for (k, lst) in build_config.extra_key_to_list.iter() {
+                let vs = lst.iter().flat_map(|v| {
+                    eval_extra_var(v, parent_target_name, parent_include_src, parent_deps)
+                }).collect::<Vec<_>>();
+                match k.as_str() {
+                    "srcs" => srcs = Some(SrcType::List(vs)),
+                    _      => append_key_values(&mut extra_kv_pairs, &k, &vs)
+                }
+            }
+            target_entries.entries.push(TargetEntry {
+                name: sec_target_name.clone(),
+                extra_kv_pairs: extra_kv_pairs
+                    .into_iter()
+                    .map(|(k, mut v)| {
+                        v.sort();
+                        v.dedup();
+                        (k, v)
+                    })
+                    .collect(),
+                extra_k_strs: build_config.extra_key_to_value.clone()
+                    .into_iter()
+                    .map(|(k, v)| {
+                        (k, v)
+                    })
+                    .collect(),
+                required_load: required_load.clone(),
+                visibility: None,
+                srcs: srcs,
+                target_type: Arc::new(build_config.function_name.clone()),
+            });
+        }
+    }
+
+    // This expands `${name}` etc appearing inside of the extra_key_to_list value
+    // with the name of the parent target.
+    fn eval_extra_var(
+        value: &String,
+        parent_target_name: &str,
+        parent_include_src: &Vec<String>,
+        parent_deps: &Vec<String>,
+    ) -> Vec<String> {
+        if value.contains("${name}") {
+            vec![value.replace("${name}", parent_target_name)]
+        } else if value.contains("${srcs}") {
+            parent_include_src.clone()
+                .into_iter()
+                .map(|v| {
+                    value.replace("${srcs}", &v)
+                })
+                .collect()
+        } else if value.contains("${deps}") {
+            parent_deps.clone()
+                .into_iter()
+                .map(|v| {
+                    value.replace("${deps}", &v)
+                })
+                .collect()
+        } else {
+            vec![value.to_string()]
+        }
+    }
+
+    apply_secondary_rules(&mut t, module_config, &target_name, &parent_include_src, &deps);
     Ok(t)
 }
 
@@ -700,6 +788,7 @@ pub async fn print_build(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use crate::Commands::PrintBuild;
     use crate::build_config::{BuildConfig, BuildLoad, GrpBuildConfig};
     use crate::build_graph::NodeType;
@@ -735,7 +824,62 @@ mod tests {
                             extra_key_to_value: HashMap::default()
                         }),
                         test: None,
-                        binary_application: None
+                        binary_application: None,
+                        secondary_rules: BTreeMap::default(),
+                    },
+                    main_roots: vec!["src/main/protos".to_string()],
+                    test_roots: vec!["src/test/protos".to_string()]
+                }
+            )]),
+            includes: vec![],
+            path_directives: vec![]
+        }
+    }
+
+    fn example_project_conf_with_secondaries() -> ProjectConf {
+        ProjectConf {
+            configurations: HashMap::from([(
+                "protos".to_string(),
+                ModuleConfig {
+                    file_extensions: vec!["proto".to_string()],
+                    build_config: BuildConfig {
+                        main: Some(GrpBuildConfig {
+                            headers: vec![
+                                BuildLoad {
+                                    load_from: "@rules_proto//proto:defs.bzl".to_string(),
+                                    load_value: "proto_library".to_string(),
+                                }
+                            ],
+                            function_name: "proto_library".to_string(),
+                            extra_key_to_list: HashMap::default(),
+                            extra_key_to_value: HashMap::default()
+                        }),
+                        test: None,
+                        binary_application: None,
+                        secondary_rules: BTreeMap::from([
+                            ("java".to_string(), GrpBuildConfig {
+                                headers: vec![],
+                                function_name: "java_proto_library".to_string(),
+                                extra_key_to_list: HashMap::from([
+                                    ("deps".to_string(), vec![":${name}".to_string()]),
+                                ]),
+                                extra_key_to_value: HashMap::default()
+                            }),
+                            ("py".to_string(), GrpBuildConfig {
+                                headers: vec![
+                                    BuildLoad {
+                                        load_from: "@com_google_protobuf//:protobuf.bzl".to_string(),
+                                        load_value: "py_proto_library".to_string(),
+                                    }
+                                ],
+                                function_name: "py_proto_library".to_string(),
+                                extra_key_to_list: HashMap::from([
+                                    ("srcs".to_string(), vec!["${srcs}".to_string()]),
+                                    ("deps".to_string(), vec!["${deps}_py".to_string()]),
+                                ]),
+                                extra_key_to_value: HashMap::default()
+                            }),
+                        ]),
                     },
                     main_roots: vec!["src/main/protos".to_string()],
                     test_roots: vec!["src/test/protos".to_string()]
@@ -766,6 +910,48 @@ filegroup(
 proto_library(
     name='protos',
     srcs=[':protos_files'],
+    deps=[],
+    visibility=['//visibility:public']
+)
+        "#,
+        ).await
+    }
+
+    #[tokio::test]
+    async fn test_generate_targets_with_secondaries() -> Result<(), Box<dyn std::error::Error>> {
+        let mut build_graph =GraphNode::default();
+        build_graph.node_type = NodeType::RealNode;
+        test_generate_targets_base(
+            example_project_conf_with_secondaries(),
+            build_graph,
+            "src/main/protos".to_string(),
+            4,
+            r#"load('@com_google_protobuf//:protobuf.bzl', 'py_proto_library')
+load('@rules_proto//proto:defs.bzl', 'proto_library')
+
+filegroup(
+    name='protos_files',
+    srcs=glob(include=['**/*.proto']),
+    visibility=['//visibility:public']
+)
+
+proto_library(
+    name='protos',
+    srcs=[':protos_files'],
+    deps=[],
+    visibility=['//visibility:public']
+)
+
+java_proto_library(
+    name='protos_java',
+    deps=[':protos'],
+    visibility=['//visibility:public']
+)
+
+py_proto_library(
+    name='protos_py',
+    srcs=[':protos_files'],
+    deps=[],
     visibility=['//visibility:public']
 )
         "#,

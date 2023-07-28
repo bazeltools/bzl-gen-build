@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,9 @@ pub struct BuildConfig {
 
     #[serde(default)]
     pub binary_application: Option<GrpBuildConfig>,
+
+    #[serde(default)]
+    pub secondary_rules: BTreeMap<String, GrpBuildConfig>,
 }
 
 impl BuildConfig {
