@@ -23,17 +23,17 @@ impl ProtobufSource {
                 "import" =>
                     {
                         for path in child_node.children_by_field_name("path", &mut child_node.walk()) {
-                            let mut quoted = path.utf8_text(bytes).unwrap().chars();
+                            let mut quoted = path.utf8_text(bytes)?.chars();
                             // Remove the quotation marks
                             quoted.next();
                             quoted.next_back();
                             buf.push(quoted.as_str().to_string());
-                        }               
+                        }
                     }
                 _        => ()
             };
         }
-        Ok(ProtobufSource { imports: buf })    
+        Ok(ProtobufSource { imports: buf })
     }
 }
 

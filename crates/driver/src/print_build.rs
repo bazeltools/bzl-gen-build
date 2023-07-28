@@ -474,6 +474,8 @@ where
     }
 
     apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
+    // before we give extra_kv_pairs away to make the main target,
+    // we need to clone deps here for a later use in secondaries.
     let deps = extra_kv_pairs
                 .entry("deps".to_string())
                 .or_default()
@@ -582,7 +584,7 @@ where
         parent_target_name: &str,
         parent_include_src: &Vec<String>,
         parent_deps: &Vec<String>,
-    ) -> Result<()> {
+    ) {
         for (k, build_config) in module_config.build_config.secondary_rules.iter() {
             let sec_target_name = format!("{}_{}", parent_target_name, k);
             let mut required_load = HashMap::default();
@@ -625,7 +627,6 @@ where
                 target_type: Arc::new(build_config.function_name.clone()),
             });
         }
-        Ok(())
     }
 
     // This expands `${name}` etc appearing inside of the extra_key_to_list value
@@ -657,7 +658,7 @@ where
         }
     }
 
-    apply_secondary_rules(&mut t, module_config, &target_name, &parent_include_src, &deps)?;
+    apply_secondary_rules(&mut t, module_config, &target_name, &parent_include_src, &deps);
     Ok(t)
 }
 

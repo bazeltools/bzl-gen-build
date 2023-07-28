@@ -87,6 +87,10 @@ async fn main() -> Result<()> {
             refs.extend(program.imports);
         }
 
+        // See https://protobuf.dev/programming-guides/proto3/#importing
+        // Protobuf uses file path relative to the workspace as a way of importing:
+        //     import "myproject/other_protos.proto";
+        // So here we export the relative path as a "definition".
         defs.extend(Some(relative_path.clone()));
 
         data_blocks.push(DataBlock {
