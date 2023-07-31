@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = "1.0.66"
 tokio = { version = "1.22.0", features = ["full"] }
 clap = { version = "4.0.26", features = ["derive"] }
-serde = { version = "1.0.147", features = ["derive"] }
+serde = { version = "1.0.179", features = ["derive"] }
 serde_json = "1.0.88"
 pretty_env_logger = "0.4.0"
 log = "0.4.17"
