@@ -649,10 +649,22 @@ where
             parent_deps
                 .clone()
                 .into_iter()
-                .map(|v| value.replace("${deps}", &v))
+                .map(|v| value.replace("${deps}", &fully_qualified_label(&v)))
                 .collect()
         } else {
             vec![value.to_string()]
+        }
+    }
+
+    fn fully_qualified_label(value: &String) -> String {
+        if value.starts_with("//") {
+            if value.contains(":") {
+                value.to_string()
+            } else {
+                format!("{}:{}", value, value.split("/").last().unwrap()).to_string()
+            }
+        } else {
+            value.to_string()
         }
     }
 
@@ -929,6 +941,9 @@ proto_library(
     async fn test_generate_targets_with_secondaries() -> Result<(), Box<dyn std::error::Error>> {
         let mut build_graph = GraphNode::default();
         build_graph.node_type = NodeType::RealNode;
+        build_graph
+            .dependencies
+            .push("src/main/protos/foo".to_string());
         test_generate_targets_base(
             example_project_conf_with_secondaries(),
             build_graph,
@@ -946,6 +961,7 @@ filegroup(
 proto_library(
     name='protos',
     srcs=[':protos_files'],
+    deps=['//src/main/protos/foo'],
     visibility=['//visibility:public']
 )
 
@@ -958,7 +974,7 @@ java_proto_library(
 py_proto_library(
     name='protos_py',
     srcs=[':protos_files'],
-    deps=[],
+    deps=['//src/main/protos/foo:foo_py'],
     visibility=['//visibility:public']
 )
         "#,
