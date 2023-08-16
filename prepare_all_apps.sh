@@ -41,6 +41,9 @@ cp ${RUST_TARGET_DIR}/bzl_gen_python_extractor $PREPARE_ALL_OUTPUT_DIR/python-en
 rm -f  $PREPARE_ALL_OUTPUT_DIR/protobuf-extractor || true
 cp ${RUST_TARGET_DIR}/bzl_gen_protobuf_extractor $PREPARE_ALL_OUTPUT_DIR/protos-entity-extractor
 
+rm -f  $PREPARE_ALL_OUTPUT_DIR/jarscanner || true
+cp ${RUST_TARGET_DIR}/bzl_gen_jarscanner $PREPARE_ALL_OUTPUT_DIR/jarscanner
+
 echo "workspace(name = \"external_build_tooling_gen\")" > $PREPARE_ALL_OUTPUT_DIR/WORKSPACE
 
 cat > $PREPARE_ALL_OUTPUT_DIR/BUILD.bazel <<EOF
