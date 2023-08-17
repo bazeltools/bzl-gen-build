@@ -1,8 +1,8 @@
-use std::{collections::HashSet, path::PathBuf, time::Instant};
 use anyhow::{Context, Result};
 use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
 use clap::Parser;
 use log::debug;
+use std::{collections::HashSet, path::PathBuf, time::Instant};
 
 mod extract_protobuf_imports;
 use extract_protobuf_imports::ProtobufSource;
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         let input_file = opt.working_directory.join(&relative_path);
         let mut refs: HashSet<String> = Default::default();
         let mut defs: HashSet<String> = Default::default();
-        let bzl_gen_build_commands: HashSet<String> = Default::default();
+        let mut bzl_gen_build_commands: HashSet<String> = Default::default();
 
         let input_str = std::fs::read_to_string(&input_file).with_context(|| {
             format!(
@@ -75,15 +75,18 @@ async fn main() -> Result<()> {
             )
         })?;
 
-        if !opt.disable_ref_generation {
-            let program = ProtobufSource::parse(&input_str, &relative_path).with_context(|| {
-                format!(
-                    "Error while parsing file {:?
-        }",
-                    input_file
-                )
-            })?;
+        let program = ProtobufSource::parse(&input_str, &relative_path).with_context(|| {
+            format!(
+                "Error while parsing file {:?
+    }",
+                input_file
+            )
+        })?;
 
+        if !program.bzl_gen_build_commands.is_empty() {
+            bzl_gen_build_commands.extend(program.bzl_gen_build_commands);
+        }
+        if !opt.disable_ref_generation {
             refs.extend(program.imports);
         }
 

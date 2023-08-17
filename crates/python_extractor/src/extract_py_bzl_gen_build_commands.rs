@@ -1,12 +1,10 @@
+use bzl_gen_build_shared_types::Directive;
+
 pub fn extract(python_src: &str) -> Vec<String> {
     let mut buf = Vec::default();
     for ln in python_src.lines() {
-        if let Some(comment_line) = ln.trim_start().strip_prefix('#') {
-            if let Some(matching) = comment_line.trim_start().strip_prefix("bzl_gen_build") {
-                if let Some(bzl_command) = matching.trim_start().strip_prefix(':') {
-                    buf.push(bzl_command.trim().to_string());
-                }
-            }
+        if let Some(bzl_command) = Directive::extract_directive(&ln, "#") {
+            buf.push(bzl_command.trim().to_string());
         }
     }
     buf.sort();

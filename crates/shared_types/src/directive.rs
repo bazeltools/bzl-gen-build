@@ -406,6 +406,15 @@ impl Directive {
             Directive::parse_attr_string_list_directive,
         ))(input)
     }
+
+    pub fn extract_directive(raw_comment: &str, comment_prefix: &str) -> Option<String> {
+        raw_comment
+            .trim_start()
+            .strip_prefix(comment_prefix)
+            .and_then(|comment_line| comment_line.trim_start().strip_prefix("bzl_gen_build"))
+            .and_then(|matching| matching.trim_start().strip_prefix(':'))
+            .map(|str| str.to_string())
+    }
 }
 
 impl std::fmt::Display for Directive {
