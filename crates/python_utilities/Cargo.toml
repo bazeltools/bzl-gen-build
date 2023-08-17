@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.74"
+anyhow = "1.0.75"
 rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7"}
 rustpython-ast = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7", features = ["unparse"]}
