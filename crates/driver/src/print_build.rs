@@ -202,11 +202,11 @@ async fn generate_targets<F, R>(
     graph_node: GraphNode,
     element: String,
     emitted_files: &mut Vec<PathBuf>,
-    on_child: F
+    on_child: F,
 ) -> Result<TargetEntries>
 where
     F: Fn(PathBuf, TargetEntries) -> R,
-    R: Future<Output = Result<i32>> + Send + 'static
+    R: Future<Output = Result<i32>> + Send + 'static,
 {
     let mut module_config: Option<(&ModuleConfig, &'static str, &'static str)> = None;
     for (_k, v) in project_conf.configurations.iter() {
@@ -476,10 +476,7 @@ where
     apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
     // before we give extra_kv_pairs away to make the main target,
     // we need to clone deps here for a later use in secondaries.
-    let deps = extra_kv_pairs
-                .entry("deps".to_string())
-                .or_default()
-                .clone();
+    let deps = extra_kv_pairs.get("deps").cloned().unwrap_or_else(Vec::new);
     if use_rglob {
         let target = TargetEntry {
             name: target_name.clone(),
@@ -597,12 +594,15 @@ where
             }
             let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
             for (k, lst) in build_config.extra_key_to_list.iter() {
-                let vs = lst.iter().flat_map(|v| {
-                    eval_extra_var(v, parent_target_name, parent_include_src, parent_deps)
-                }).collect::<Vec<_>>();
+                let vs = lst
+                    .iter()
+                    .flat_map(|v| {
+                        eval_extra_var(v, parent_target_name, parent_include_src, parent_deps)
+                    })
+                    .collect::<Vec<_>>();
                 match k.as_str() {
                     "srcs" => srcs = Some(SrcType::List(vs)),
-                    _      => append_key_values(&mut extra_kv_pairs, &k, &vs)
+                    _ => append_key_values(&mut extra_kv_pairs, &k, &vs),
                 }
             }
             target_entries.entries.push(TargetEntry {
@@ -615,11 +615,11 @@ where
                         (k, v)
                     })
                     .collect(),
-                extra_k_strs: build_config.extra_key_to_value.clone()
+                extra_k_strs: build_config
+                    .extra_key_to_value
+                    .clone()
                     .into_iter()
-                    .map(|(k, v)| {
-                        (k, v)
-                    })
+                    .map(|(k, v)| (k, v))
                     .collect(),
                 required_load: required_load.clone(),
                 visibility: None,
@@ -640,25 +640,29 @@ where
         if value.contains("${name}") {
             vec![value.replace("${name}", parent_target_name)]
         } else if value.contains("${srcs}") {
-            parent_include_src.clone()
+            parent_include_src
+                .clone()
                 .into_iter()
-                .map(|v| {
-                    value.replace("${srcs}", &v)
-                })
+                .map(|v| value.replace("${srcs}", &v))
                 .collect()
         } else if value.contains("${deps}") {
-            parent_deps.clone()
+            parent_deps
+                .clone()
                 .into_iter()
-                .map(|v| {
-                    value.replace("${deps}", &v)
-                })
+                .map(|v| value.replace("${deps}", &v))
                 .collect()
         } else {
             vec![value.to_string()]
         }
     }
 
-    apply_secondary_rules(&mut t, module_config, &target_name, &parent_include_src, &deps);
+    apply_secondary_rules(
+        &mut t,
+        module_config,
+        &target_name,
+        &parent_include_src,
+        &deps,
+    );
     Ok(t)
 }
 
@@ -686,7 +690,9 @@ async fn print_file(
                 .await
                 .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             Ok(0)
-        }).await?;
+        },
+    )
+    .await?;
     let handle = concurrent_io_operations.acquire().await?;
     tokio::fs::write(&target_file, t.emit_build_file()?)
         .await
@@ -788,10 +794,10 @@ pub async fn print_build(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
-    use crate::Commands::PrintBuild;
     use crate::build_config::{BuildConfig, BuildLoad, GrpBuildConfig};
     use crate::build_graph::NodeType;
+    use crate::Commands::PrintBuild;
+    use std::collections::BTreeMap;
 
     fn example_opt() -> Opt {
         Opt {
@@ -800,7 +806,7 @@ mod tests {
             concurrent_io_operations: 8,
             cache_path: PathBuf::new(),
             command: PrintBuild(PrintBuildArgs {
-                graph_data: PathBuf::new()
+                graph_data: PathBuf::new(),
             }),
         }
     }
@@ -813,26 +819,24 @@ mod tests {
                     file_extensions: vec!["proto".to_string()],
                     build_config: BuildConfig {
                         main: Some(GrpBuildConfig {
-                            headers: vec![
-                                BuildLoad {
-                                    load_from: "@rules_proto//proto:defs.bzl".to_string(),
-                                    load_value: "proto_library".to_string(),
-                                }
-                            ],
+                            headers: vec![BuildLoad {
+                                load_from: "@rules_proto//proto:defs.bzl".to_string(),
+                                load_value: "proto_library".to_string(),
+                            }],
                             function_name: "proto_library".to_string(),
                             extra_key_to_list: HashMap::default(),
-                            extra_key_to_value: HashMap::default()
+                            extra_key_to_value: HashMap::default(),
                         }),
                         test: None,
                         binary_application: None,
                         secondary_rules: BTreeMap::default(),
                     },
                     main_roots: vec!["src/main/protos".to_string()],
-                    test_roots: vec!["src/test/protos".to_string()]
-                }
+                    test_roots: vec!["src/test/protos".to_string()],
+                },
             )]),
             includes: vec![],
-            path_directives: vec![]
+            path_directives: vec![],
         }
     }
 
@@ -844,55 +848,59 @@ mod tests {
                     file_extensions: vec!["proto".to_string()],
                     build_config: BuildConfig {
                         main: Some(GrpBuildConfig {
-                            headers: vec![
-                                BuildLoad {
-                                    load_from: "@rules_proto//proto:defs.bzl".to_string(),
-                                    load_value: "proto_library".to_string(),
-                                }
-                            ],
+                            headers: vec![BuildLoad {
+                                load_from: "@rules_proto//proto:defs.bzl".to_string(),
+                                load_value: "proto_library".to_string(),
+                            }],
                             function_name: "proto_library".to_string(),
                             extra_key_to_list: HashMap::default(),
-                            extra_key_to_value: HashMap::default()
+                            extra_key_to_value: HashMap::default(),
                         }),
                         test: None,
                         binary_application: None,
                         secondary_rules: BTreeMap::from([
-                            ("java".to_string(), GrpBuildConfig {
-                                headers: vec![],
-                                function_name: "java_proto_library".to_string(),
-                                extra_key_to_list: HashMap::from([
-                                    ("deps".to_string(), vec![":${name}".to_string()]),
-                                ]),
-                                extra_key_to_value: HashMap::default()
-                            }),
-                            ("py".to_string(), GrpBuildConfig {
-                                headers: vec![
-                                    BuildLoad {
-                                        load_from: "@com_google_protobuf//:protobuf.bzl".to_string(),
+                            (
+                                "java".to_string(),
+                                GrpBuildConfig {
+                                    headers: vec![],
+                                    function_name: "java_proto_library".to_string(),
+                                    extra_key_to_list: HashMap::from([(
+                                        "deps".to_string(),
+                                        vec![":${name}".to_string()],
+                                    )]),
+                                    extra_key_to_value: HashMap::default(),
+                                },
+                            ),
+                            (
+                                "py".to_string(),
+                                GrpBuildConfig {
+                                    headers: vec![BuildLoad {
+                                        load_from: "@com_google_protobuf//:protobuf.bzl"
+                                            .to_string(),
                                         load_value: "py_proto_library".to_string(),
-                                    }
-                                ],
-                                function_name: "py_proto_library".to_string(),
-                                extra_key_to_list: HashMap::from([
-                                    ("srcs".to_string(), vec!["${srcs}".to_string()]),
-                                    ("deps".to_string(), vec!["${deps}_py".to_string()]),
-                                ]),
-                                extra_key_to_value: HashMap::default()
-                            }),
+                                    }],
+                                    function_name: "py_proto_library".to_string(),
+                                    extra_key_to_list: HashMap::from([
+                                        ("srcs".to_string(), vec!["${srcs}".to_string()]),
+                                        ("deps".to_string(), vec!["${deps}_py".to_string()]),
+                                    ]),
+                                    extra_key_to_value: HashMap::default(),
+                                },
+                            ),
                         ]),
                     },
                     main_roots: vec!["src/main/protos".to_string()],
-                    test_roots: vec!["src/test/protos".to_string()]
-                }
+                    test_roots: vec!["src/test/protos".to_string()],
+                },
             )]),
             includes: vec![],
-            path_directives: vec![]
+            path_directives: vec![],
         }
     }
 
     #[tokio::test]
     async fn test_generate_targets() -> Result<(), Box<dyn std::error::Error>> {
-        let mut build_graph =GraphNode::default();
+        let mut build_graph = GraphNode::default();
         build_graph.node_type = NodeType::RealNode;
         test_generate_targets_base(
             example_project_conf(),
@@ -910,16 +918,16 @@ filegroup(
 proto_library(
     name='protos',
     srcs=[':protos_files'],
-    deps=[],
     visibility=['//visibility:public']
 )
         "#,
-        ).await
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_generate_targets_with_secondaries() -> Result<(), Box<dyn std::error::Error>> {
-        let mut build_graph =GraphNode::default();
+        let mut build_graph = GraphNode::default();
         build_graph.node_type = NodeType::RealNode;
         test_generate_targets_base(
             example_project_conf_with_secondaries(),
@@ -938,7 +946,6 @@ filegroup(
 proto_library(
     name='protos',
     srcs=[':protos_files'],
-    deps=[],
     visibility=['//visibility:public']
 )
 
@@ -955,7 +962,8 @@ py_proto_library(
     visibility=['//visibility:public']
 )
         "#,
-        ).await
+        )
+        .await
     }
 
     async fn test_generate_targets_base(
@@ -974,14 +982,10 @@ py_proto_library(
             build_graph,
             element,
             &mut emitted_files,
-            |_sub_target: PathBuf, _t: TargetEntries| async move {
-                Ok(0)
-            }
-        ).await?;
-        assert_eq!(
-            target_entries.entries.len(),
-            expected_target_count
-        );
+            |_sub_target: PathBuf, _t: TargetEntries| async move { Ok(0) },
+        )
+        .await?;
+        assert_eq!(target_entries.entries.len(), expected_target_count);
         let generated_s = target_entries.emit_build_file()?;
         let actual_parsed = PythonProgram::parse(generated_s.as_str(), "tmp.py")?;
         let expected_parsed = {
