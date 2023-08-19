@@ -125,8 +125,10 @@ async fn main() -> Result<()> {
 fn expand_path_to_defs_from_offset(from_given_path: &str, path: &str) -> Vec<String> {
     // rules_python Bzlmod support uses pip-tools, which I think places the 3rdparty
     // source files inside a site-packages/ directory, per module.
-    if let Some(rem) = path.strip_prefix(from_given_path)
-        .and_then(|p| Some(p.strip_prefix("site-packages/").unwrap_or(p))) {
+    if let Some(rem) = path
+        .strip_prefix(from_given_path)
+        .and_then(|p| Some(p.strip_prefix("site-packages/").unwrap_or(p)))
+    {
         if let Some(e) = rem.strip_suffix(".py") {
             let targ = e.replace('/', ".");
 
