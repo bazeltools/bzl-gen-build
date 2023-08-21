@@ -181,6 +181,14 @@ fn read_all_project_conf(input_path: &Path, working_directory: &Path) -> Result<
     Ok(v)
 }
 
+pub fn to_directory(rel_path: String) -> String {
+    if let Some(idx) = rel_path.rfind('/') {
+        rel_path.split_at(idx).0.to_string()
+    } else {
+        rel_path
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::parse();

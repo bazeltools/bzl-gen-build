@@ -138,7 +138,7 @@ impl SrcType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct TargetEntries {
     pub entries: Vec<TargetEntry>,
 }
