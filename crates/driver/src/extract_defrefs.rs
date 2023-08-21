@@ -7,7 +7,9 @@ use std::{
 };
 
 use super::sha256_value::Sha256Value;
-use crate::{async_read_json_file, async_write_json_file, write_json_file, Extract, Opt};
+use crate::{
+    async_read_json_file, async_write_json_file, to_directory, write_json_file, Extract, Opt,
+};
 use anyhow::{anyhow, Context, Result};
 use bzl_gen_build_shared_types::{
     api::extracted_data::ExtractedData, internal_types::tree_node::TreeNode,
@@ -194,7 +196,7 @@ async fn async_extract_def_refs(
 async fn merge_defrefs(
     concurrent_io_operations: &Semaphore,
     path_sha_to_merged_defrefs: &'static Path,
-    directory: String,
+    entry: String,
     project_conf: &'static ProjectConf,
     mut work_items: Vec<ProcessedFile>,
     sha_of_conf_config: Arc<String>,
@@ -211,7 +213,7 @@ async fn merge_defrefs(
     let treenode_path = path_sha_to_merged_defrefs.join(format!("{}.treenode", merged_sha));
 
     if !treenode_path.exists() {
-        let mut existing: TreeNode = TreeNode::from_label(directory.clone());
+        let mut existing: TreeNode = TreeNode::from_label(entry.clone());
         let c = concurrent_io_operations.acquire().await?;
 
         for ele in work_items.iter() {
@@ -231,7 +233,7 @@ async fn merge_defrefs(
         let directive_strings: Vec<String> = project_conf
             .path_directives
             .iter()
-            .filter(|directive| directory.starts_with(&directive.prefix))
+            .filter(|directive| entry.starts_with(&directive.prefix))
             .flat_map(|e| e.directive_strings.iter())
             .cloned()
             .collect();
@@ -244,7 +246,7 @@ async fn merge_defrefs(
     };
 
     Ok((
-        directory,
+        entry,
         ExtractedMapping {
             path: treenode_path.to_string_lossy().to_string(),
             content_sha: format!("{}", merged_sha),
@@ -528,23 +530,18 @@ pub async fn extract_defrefs(
                 .to_string_lossy()
                 .to_string();
 
-            let directory = if let Some(idx) = rel_path.rfind('/') {
-                rel_path.split_at(idx).0.to_string()
-            } else {
-                rel_path
-            };
-
-            work.entry(directory).or_default().push(processed_file);
+            let entry = to_directory(rel_path);
+            work.entry(entry).or_default().push(processed_file);
         }
 
-        for (directory, files) in work.into_iter() {
+        for (entry, files) in work.into_iter() {
             let sha_of_conf_config = sha_of_conf_config.clone();
             let path_sha_to_merged_defrefs = path_sha_to_merged_defrefs;
             merge_work.push(tokio::spawn(async move {
                 merge_defrefs(
                     concurrent_io_operations,
                     path_sha_to_merged_defrefs,
-                    directory,
+                    entry,
                     project_conf,
                     files,
                     sha_of_conf_config,
