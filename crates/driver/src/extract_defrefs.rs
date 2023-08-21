@@ -200,6 +200,7 @@ async fn merge_defrefs(
     project_conf: &'static ProjectConf,
     mut work_items: Vec<ProcessedFile>,
     sha_of_conf_config: Arc<String>,
+    no_aggregate_source: bool,
 ) -> Result<(String, ExtractedMapping)> {
     work_items.sort_by(|a, b| a.sha256.cmp(&b.sha256));
 
@@ -207,7 +208,13 @@ async fn merge_defrefs(
         work_items
             .iter()
             .map(|e| e.sha256.as_bytes())
-            .chain(std::iter::once(sha_of_conf_config.as_bytes())),
+            .chain(std::iter::once(sha_of_conf_config.as_bytes()))
+            // We need to break the cache if no_aggregate_source changes
+            .chain(std::iter::once(if no_aggregate_source {
+                &[1][0..1]
+            } else {
+                &[0][0..1]
+            })),
     );
 
     let treenode_path = path_sha_to_merged_defrefs.join(format!("{}.treenode", merged_sha));
@@ -318,6 +325,7 @@ async fn inner_load_external(
         project_conf,
         work_items,
         sha_of_conf_config,
+        _opt.no_aggregate_source,
     )
     .await
 }
@@ -530,7 +538,11 @@ pub async fn extract_defrefs(
                 .to_string_lossy()
                 .to_string();
 
-            let entry = to_directory(rel_path);
+            let entry = if !opt.no_aggregate_source {
+                to_directory(rel_path)
+            } else {
+                rel_path
+            };
             work.entry(entry).or_default().push(processed_file);
         }
 
@@ -545,6 +557,7 @@ pub async fn extract_defrefs(
                     project_conf,
                     files,
                     sha_of_conf_config,
+                    opt.no_aggregate_source,
                 )
                 .await
             }))

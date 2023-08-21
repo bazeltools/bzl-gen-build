@@ -7,7 +7,7 @@ use std::{
 use super::sha256_value::Sha256Value;
 use crate::{
     async_read_json_file, async_write_json_file, extract_defrefs::ExtractedMapping, read_json_file,
-    write_json_file, ExtractDefs, Opt,
+    to_directory, write_json_file, ExtractDefs, Opt,
 };
 use anyhow::{anyhow, Context, Result};
 use bzl_gen_build_shared_types::{internal_types::tree_node::TreeNode, *};
@@ -74,18 +74,16 @@ pub async fn extract_exports(
     let extracted_mappings: ExtractedMappings = read_json_file(&extract.extracted_mappings)?;
 
     let mut work: HashMap<String, Vec<ExtractedMapping>> = HashMap::default();
-    for (k, content_path) in extracted_mappings.relative_path_to_extractmapping.iter() {
-        let directory = if let Some(idx) = k.rfind('/') {
-            let u_k = k.split_at(idx).0;
-
-            u_k.rfind('/').map(|e| u_k.split_at(e).0).unwrap_or(u_k)
+    for (rel_path, content_path) in extracted_mappings.relative_path_to_extractmapping.iter() {
+        let entry = if !opt.no_aggregate_source {
+            to_directory(rel_path.to_string())
         } else {
-            k.as_str()
+            rel_path.to_string()
         };
-        if let Some(v) = work.get_mut(directory) {
+        if let Some(v) = work.get_mut(&entry) {
             v.push(content_path.clone());
         } else {
-            work.insert(directory.to_string(), vec![content_path.clone()]);
+            work.insert(entry, vec![content_path.clone()]);
         }
     }
 

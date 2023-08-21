@@ -42,10 +42,13 @@ pub struct GraphNode {
     #[serde(default, skip_serializing_if = "GraphNodeMetadata::is_empty")]
     pub node_metadata: GraphNodeMetadata,
     pub node_type: NodeType,
+    pub node_label: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, Eq)]
 pub struct GraphNodeMetadata {
+    #[serde(default)]
+    pub name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binary_refs: Vec<BinaryRefAndPath>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -64,6 +67,7 @@ impl GraphNodeMetadata {
 impl<'a> From<&'a NodeExternalState> for GraphNodeMetadata {
     fn from(nes: &'a NodeExternalState) -> Self {
         Self {
+            name: nes.name.to_string(),
             binary_refs: nes.binary_refs.clone(),
             manual_refs: nes.manual_refs.clone(),
             attr_string_lists: nes.attr_string_lists.clone(),
@@ -922,6 +926,7 @@ pub async fn build_graph(
                 );
             }
         }
+        output_node.node_label = k_name.to_string();
         output_node.node_type = node_state.node_type;
         output_node.node_metadata = node_state.as_ref().into();
         output_node.runtime_dependencies.sort();

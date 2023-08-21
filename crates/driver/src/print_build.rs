@@ -7,7 +7,7 @@ use std::{
 use crate::{
     async_read_json_file,
     build_graph::{GraphMapping, GraphNode, GraphNodeMetadata},
-    Opt, PrintBuildArgs,
+    to_directory, Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
 use ast::{Located, StmtKind};
@@ -199,7 +199,7 @@ impl TargetEntries {
 async fn generate_targets<F, R>(
     opt: &'static Opt,
     project_conf: &'static ProjectConf,
-    graph_node: GraphNode,
+    graph_nodes: Vec<GraphNode>,
     element: String,
     emitted_files: &mut Vec<PathBuf>,
     on_child: F,
@@ -248,127 +248,271 @@ where
     };
 
     let target_folder = opt.working_directory.join(&element);
-    let target_name = target_folder
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+    let base_name = to_file_name(&target_folder);
+    let mut t: TargetEntries = Default::default();
+    for graph_node in graph_nodes {
+        let node_file = opt.working_directory.join(&graph_node.node_label);
+        let node_file_name = to_file_name(&node_file);
+        let target_name = if !opt.no_aggregate_source {
+            base_name.clone()
+        } else {
+            node_file_name.replace(".", "_")
+        };
+        let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
 
-    let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
+        fn add_non_empty(
+            opt: &'static Opt,
+            key: &str,
+            labels: &Vec<String>,
+            extra_kv_pairs: &mut HashMap<String, Vec<String>>,
+        ) {
+            if !labels.is_empty() {
+                let vals = labels.iter().map(|e| to_label(&opt, e)).collect();
+                extra_kv_pairs.insert(key.to_string(), vals);
+            }
+        }
 
-    if !graph_node.dependencies.is_empty() {
-        let deps: Vec<String> = graph_node
-            .dependencies
+        add_non_empty(opt, "deps", &graph_node.dependencies, &mut extra_kv_pairs);
+        add_non_empty(
+            opt,
+            "runtime_deps",
+            &graph_node.runtime_dependencies,
+            &mut extra_kv_pairs,
+        );
+
+        let (build_config, use_rglob) = if path_type == "test" {
+            (&module_config.build_config.test, true)
+        } else {
+            (&module_config.build_config.main, false)
+        };
+
+        let build_config = if let Some(bc) = build_config {
+            bc
+        } else {
+            return Err(anyhow!(
+                "unable to find build configuration for {:?}",
+                graph_node
+            ));
+        };
+
+        for (k, lst) in build_config.extra_key_to_list.iter() {
+            append_key_values(&mut extra_kv_pairs, &k, &lst);
+        }
+
+        for directive in project_conf
+            .path_directives
             .iter()
-            .map(|e| {
-                if e.starts_with('@') {
-                    e.clone()
-                } else {
-                    format!("//{}", e)
-                }
-            })
-            .collect();
-        extra_kv_pairs.insert("deps".to_string(), deps);
-    }
-
-    if !graph_node.runtime_dependencies.is_empty() {
-        let deps: Vec<String> = graph_node
-            .runtime_dependencies
-            .iter()
-            .map(|e| {
-                if e.starts_with('@') {
-                    e.clone()
-                } else {
-                    format!("//{}", e)
-                }
-            })
-            .collect();
-        extra_kv_pairs.insert("runtime_deps".to_string(), deps);
-    }
-
-    let (build_config, use_rglob) = if path_type == "test" {
-        (&module_config.build_config.test, true)
-    } else {
-        (&module_config.build_config.main, false)
-    };
-
-    let build_config = if let Some(bc) = build_config {
-        bc
-    } else {
-        return Err(anyhow!(
-            "unable to find build configuration for {:?}",
-            graph_node
-        ));
-    };
-
-    for (k, lst) in build_config.extra_key_to_list.iter() {
-        append_key_values(&mut extra_kv_pairs, &k, &lst);
-    }
-
-    for directive in project_conf
-        .path_directives
-        .iter()
-        .filter(|e| element.starts_with(&e.prefix))
-    {
-        match directive.directives().as_ref() {
-            Ok(loaded) => {
-                for d in loaded {
-                    match d {
-                        Directive::BinaryRef(_) => todo!(),
-                        // Other directive types are actioned much earlier in the pipeline.
-                        Directive::SrcDirective(_) => (), // no op.
-                        Directive::EntityDirective(_) => (), // no op
-                        Directive::ManualRef(manual_ref) => match manual_ref.command {
-                            directive::ManualRefDirective::RuntimeRef => {
-                                let t = extra_kv_pairs
-                                    .entry("runtime_deps".to_string())
-                                    .or_default();
-                                t.push(manual_ref.target_value.clone())
+            .filter(|e| element.starts_with(&e.prefix))
+        {
+            match directive.directives().as_ref() {
+                Ok(loaded) => {
+                    for d in loaded {
+                        match d {
+                            Directive::BinaryRef(_) => todo!(),
+                            // Other directive types are actioned much earlier in the pipeline.
+                            Directive::SrcDirective(_) => (), // no op.
+                            Directive::EntityDirective(_) => (), // no op
+                            Directive::ManualRef(manual_ref) => match manual_ref.command {
+                                directive::ManualRefDirective::RuntimeRef => {
+                                    let t = extra_kv_pairs
+                                        .entry("runtime_deps".to_string())
+                                        .or_default();
+                                    t.push(manual_ref.target_value.clone())
+                                }
+                                directive::ManualRefDirective::Ref => {
+                                    let t = extra_kv_pairs.entry("deps".to_string()).or_default();
+                                    t.push(manual_ref.target_value.clone())
+                                }
+                                directive::ManualRefDirective::DataRef => {
+                                    let t = extra_kv_pairs.entry("data".to_string()).or_default();
+                                    t.push(manual_ref.target_value.clone())
+                                }
+                            },
+                            Directive::AttrStringList(attr) => {
+                                append_key_values(
+                                    &mut extra_kv_pairs,
+                                    &attr.attr_name,
+                                    &attr.values,
+                                );
                             }
-                            directive::ManualRefDirective::Ref => {
-                                let t = extra_kv_pairs.entry("deps".to_string()).or_default();
-                                t.push(manual_ref.target_value.clone())
-                            }
-                            directive::ManualRefDirective::DataRef => {
-                                let t = extra_kv_pairs.entry("data".to_string()).or_default();
-                                t.push(manual_ref.target_value.clone())
-                            }
-                        },
-                        Directive::AttrStringList(attr) => {
-                            append_key_values(&mut extra_kv_pairs, &attr.attr_name, &attr.values);
                         }
                     }
                 }
+                Err(err) => return Err(anyhow!("{:#?}", err)),
             }
-            Err(err) => return Err(anyhow!("{:#?}", err)),
+        }
+
+        let mut required_load = HashMap::default();
+
+        for h in build_config.headers.iter() {
+            required_load.insert(
+                Arc::new(h.load_from.clone()),
+                vec![Arc::new(h.load_value.clone())],
+            );
+        }
+
+        let primary_extension = if let Some(e) = module_config.file_extensions.first() {
+            e
+        } else {
+            return Err(anyhow!(
+                "No configured primary extension in {:?}",
+                module_config
+            ));
+        };
+
+        let filegroup_target_name = format!("{}_files", target_name);
+
+        let mut parent_include_src = Vec::default();
+
+        apply_binaries(&mut t, &graph_node.node_metadata, module_config, &element)?;
+        apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
+        apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
+        // before we give extra_kv_pairs away to make the main target,
+        // we need to clone deps here for a later use in secondaries.
+        let deps = extra_kv_pairs.get("deps").cloned().unwrap_or_else(Vec::new);
+        if use_rglob {
+            let target = TargetEntry {
+                name: target_name.clone(),
+                extra_kv_pairs: extra_kv_pairs
+                    .into_iter()
+                    .map(|(k, mut v)| {
+                        v.sort();
+                        v.dedup();
+                        (k, v)
+                    })
+                    .collect(),
+                required_load,
+                visibility: None,
+                srcs: Some(SrcType::Glob {
+                    include: vec![format!("**/*.{}", primary_extension)],
+                    exclude: Vec::default(),
+                }),
+                target_type: Arc::new(build_config.function_name.clone()),
+                extra_k_strs: Vec::default(),
+            };
+
+            t.entries.push(target);
+        } else {
+            match graph_node.node_type {
+                crate::build_graph::NodeType::Synthetic => {}
+                crate::build_graph::NodeType::RealNode => {
+                    if !opt.no_aggregate_source {
+                        parent_include_src.push(format!(":{}", filegroup_target_name));
+
+                        let filegroup_target = TargetEntry {
+                            name: filegroup_target_name.clone(),
+                            extra_kv_pairs: Vec::default(),
+                            required_load: HashMap::default(),
+                            visibility: None,
+                            srcs: Some(SrcType::Glob {
+                                include: vec![format!("**/*.{}", primary_extension)],
+                                exclude: Vec::default(),
+                            }),
+                            target_type: Arc::new("filegroup".to_string()),
+                            extra_k_strs: Vec::default(),
+                        };
+                        t.entries.push(filegroup_target);
+                    } else {
+                        parent_include_src.push(format!("{}", node_file_name));
+                    }
+                }
+            }
+
+            let mut child_nodes: HashMap<String, Vec<GraphNodeMetadata>> = HashMap::default();
+            for (entry, metadata) in graph_node.child_nodes.iter() {
+                let metadata = metadata.clone();
+                let element = if !opt.no_aggregate_source {
+                    entry.clone()
+                } else {
+                    to_directory(entry.to_string())
+                };
+                let v = child_nodes.entry(element).or_default();
+                v.push(metadata);
+            }
+            for (directory, metadatas) in child_nodes.iter() {
+                if let Some(folder_name) = directory.split('/').filter(|e| !e.is_empty()).last() {
+                    parent_include_src.push(format!("//{}:{}_files", directory, folder_name));
+
+                    let filegroup_target = TargetEntry {
+                        name: format!("{}_files", folder_name),
+                        extra_kv_pairs: Vec::default(),
+                        required_load: HashMap::default(),
+                        visibility: None,
+                        srcs: Some(SrcType::Glob {
+                            include: vec![format!("**/*.{}", primary_extension)],
+                            exclude: Vec::default(),
+                        }),
+                        target_type: Arc::new("filegroup".to_string()),
+                        extra_k_strs: Vec::default(),
+                    };
+                    let mut t = TargetEntries {
+                        entries: vec![filegroup_target],
+                    };
+
+                    for metadata in metadatas.iter() {
+                        apply_manual_refs(&mut extra_kv_pairs, metadata);
+                        apply_attr_string_lists(&mut extra_kv_pairs, metadata);
+                        apply_binaries(&mut t, metadata, module_config, &directory)?;
+                    }
+
+                    let sub_target = opt.working_directory.join(directory).join("BUILD.bazel");
+                    emitted_files.push(sub_target.clone());
+                    on_child(sub_target, t).await?;
+                } else {
+                    return Err(anyhow!(
+                        "Unable to extract folder name for node: {}",
+                        directory
+                    ));
+                }
+            }
+
+            let target = TargetEntry {
+                name: target_name.clone(),
+                extra_kv_pairs: extra_kv_pairs
+                    .into_iter()
+                    .map(|(k, mut v)| {
+                        v.sort();
+                        v.dedup();
+                        (k, v)
+                    })
+                    .collect(),
+                required_load,
+                visibility: None,
+                srcs: Some(SrcType::List(parent_include_src.clone())),
+                target_type: Arc::new(build_config.function_name.clone()),
+                extra_k_strs: Vec::default(),
+            };
+
+            t.entries.push(target);
+        }
+
+        apply_secondary_rules(
+            &mut t,
+            module_config,
+            &target_name,
+            &parent_include_src,
+            &deps,
+        );
+    } // end for graph_nodes
+
+    fn to_label(opt: &'static Opt, entry: &String) -> String {
+        if entry.starts_with('@') {
+            entry.clone()
+        } else {
+            if !opt.no_aggregate_source {
+                format!("//{}", entry)
+            } else {
+                let directory = to_directory(entry.to_string());
+                let full_file = opt.working_directory.join(&entry);
+                let name = to_file_name(&full_file).replace(".", "_");
+                format!("//{}:{}", directory, name)
+            }
         }
     }
 
-    let mut required_load = HashMap::default();
-
-    for h in build_config.headers.iter() {
-        required_load.insert(
-            Arc::new(h.load_from.clone()),
-            vec![Arc::new(h.load_value.clone())],
-        );
+    fn to_file_name(path: &PathBuf) -> String {
+        path.file_name().unwrap().to_str().unwrap().to_string()
     }
-
-    let primary_extension = if let Some(e) = module_config.file_extensions.first() {
-        e
-    } else {
-        return Err(anyhow!(
-            "No configured primary extension in {:?}",
-            module_config
-        ));
-    };
-
-    let mut t = TargetEntries {
-        entries: Vec::default(),
-    };
-    let filegroup_target_name = format!("{}_files", target_name);
-
-    let mut parent_include_src = Vec::default();
 
     fn apply_binaries(
         target_entries: &mut TargetEntries,
@@ -421,8 +565,6 @@ where
         Ok(())
     }
 
-    apply_binaries(&mut t, &graph_node.node_metadata, module_config, &element)?;
-
     fn apply_manual_refs(
         extra_kv_pairs: &mut HashMap<String, Vec<String>>,
         node_metadata: &GraphNodeMetadata,
@@ -451,8 +593,6 @@ where
         }
     }
 
-    apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
-
     fn append_key_values(
         extra_kv_pairs: &mut HashMap<String, Vec<String>>,
         key: &String,
@@ -471,108 +611,6 @@ where
         for attr in node_metadata.attr_string_lists.iter() {
             append_key_values(extra_kv_pairs, &attr.attr_name, &attr.values);
         }
-    }
-
-    apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
-    // before we give extra_kv_pairs away to make the main target,
-    // we need to clone deps here for a later use in secondaries.
-    let deps = extra_kv_pairs.get("deps").cloned().unwrap_or_else(Vec::new);
-    if use_rglob {
-        let target = TargetEntry {
-            name: target_name.clone(),
-            extra_kv_pairs: extra_kv_pairs
-                .into_iter()
-                .map(|(k, mut v)| {
-                    v.sort();
-                    v.dedup();
-                    (k, v)
-                })
-                .collect(),
-            required_load,
-            visibility: None,
-            srcs: Some(SrcType::Glob {
-                include: vec![format!("**/*.{}", primary_extension)],
-                exclude: Vec::default(),
-            }),
-            target_type: Arc::new(build_config.function_name.clone()),
-            extra_k_strs: Vec::default(),
-        };
-
-        t.entries.push(target);
-    } else {
-        match graph_node.node_type {
-            crate::build_graph::NodeType::Synthetic => {}
-            crate::build_graph::NodeType::RealNode => {
-                parent_include_src.push(format!(":{}", filegroup_target_name));
-
-                let filegroup_target = TargetEntry {
-                    name: filegroup_target_name.clone(),
-                    extra_kv_pairs: Vec::default(),
-                    required_load: HashMap::default(),
-                    visibility: None,
-                    srcs: Some(SrcType::Glob {
-                        include: vec![format!("**/*.{}", primary_extension)],
-                        exclude: Vec::default(),
-                    }),
-                    target_type: Arc::new("filegroup".to_string()),
-                    extra_k_strs: Vec::default(),
-                };
-                t.entries.push(filegroup_target);
-            }
-        }
-
-        for (node, metadata) in graph_node.child_nodes.iter() {
-            if let Some(folder_name) = node.split('/').filter(|e| !e.is_empty()).last() {
-                parent_include_src.push(format!("//{}:{}_files", node, folder_name));
-
-                let filegroup_target = TargetEntry {
-                    name: format!("{}_files", folder_name),
-                    extra_kv_pairs: Vec::default(),
-                    required_load: HashMap::default(),
-                    visibility: None,
-                    srcs: Some(SrcType::Glob {
-                        include: vec![format!("**/*.{}", primary_extension)],
-                        exclude: Vec::default(),
-                    }),
-                    target_type: Arc::new("filegroup".to_string()),
-                    extra_k_strs: Vec::default(),
-                };
-
-                apply_manual_refs(&mut extra_kv_pairs, metadata);
-                apply_attr_string_lists(&mut extra_kv_pairs, metadata);
-
-                let mut t = TargetEntries {
-                    entries: vec![filegroup_target],
-                };
-
-                apply_binaries(&mut t, metadata, module_config, &element)?;
-
-                let sub_target = opt.working_directory.join(node).join("BUILD.bazel");
-                emitted_files.push(sub_target.clone());
-                on_child(sub_target, t).await?;
-            } else {
-                return Err(anyhow!("Unable to extract folder name for node: {}", node));
-            }
-        }
-
-        let target = TargetEntry {
-            name: target_name.clone(),
-            extra_kv_pairs: extra_kv_pairs
-                .into_iter()
-                .map(|(k, mut v)| {
-                    v.sort();
-                    v.dedup();
-                    (k, v)
-                })
-                .collect(),
-            required_load,
-            visibility: None,
-            srcs: Some(SrcType::List(parent_include_src.clone())),
-            target_type: Arc::new(build_config.function_name.clone()),
-            extra_k_strs: Vec::default(),
-        };
-
-        t.entries.push(target);
     }
 
     fn apply_secondary_rules(
@@ -668,13 +706,6 @@ where
         }
     }
 
-    apply_secondary_rules(
-        &mut t,
-        module_config,
-        &target_name,
-        &parent_include_src,
-        &deps,
-    );
     Ok(t)
 }
 
@@ -682,7 +713,7 @@ where
 async fn print_file(
     opt: &'static Opt,
     project_conf: &'static ProjectConf,
-    graph_node: GraphNode,
+    graph_nodes: Vec<GraphNode>,
     concurrent_io_operations: &'static Semaphore,
     element: String,
 ) -> Result<Vec<PathBuf>> {
@@ -693,7 +724,7 @@ async fn print_file(
     let t = generate_targets(
         opt,
         project_conf,
-        graph_node,
+        graph_nodes,
         element,
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
@@ -768,22 +799,27 @@ pub async fn print_build(
         .await
         .with_context(|| "Finding all build files")?;
 
-    let mut res = Vec::default();
-    for (element, graph_node) in graph_data
+    let mut graph_nodes: HashMap<String, Vec<GraphNode>> = HashMap::default();
+    for (entry, graph_node) in graph_data
         .build_mapping
         .into_iter()
         .filter(|(k, _v)| !k.starts_with('@'))
     {
         let graph_node = graph_node.clone();
+        let element = if !opt.no_aggregate_source {
+            entry
+        } else {
+            to_directory(entry.to_string())
+        };
+        let v = graph_nodes.entry(element).or_default();
+        v.push(graph_node);
+        v.sort_by(|a, b| a.node_label.cmp(&b.node_label))
+    }
+
+    let mut res = Vec::default();
+    for (element, nodes) in graph_nodes {
         res.push(tokio::spawn(async move {
-            print_file(
-                opt,
-                project_conf,
-                graph_node,
-                concurrent_io_operations,
-                element,
-            )
-            .await
+            print_file(opt, project_conf, nodes, concurrent_io_operations, element).await
         }));
     }
 
@@ -811,12 +847,13 @@ mod tests {
     use crate::Commands::PrintBuild;
     use std::collections::BTreeMap;
 
-    fn example_opt() -> Opt {
+    fn example_opt(no_aggregate_source: bool) -> Opt {
         Opt {
             input_path: PathBuf::new(),
             working_directory: PathBuf::new(),
             concurrent_io_operations: 8,
             cache_path: PathBuf::new(),
+            no_aggregate_source: no_aggregate_source,
             command: PrintBuild(PrintBuildArgs {
                 graph_data: PathBuf::new(),
             }),
@@ -914,9 +951,10 @@ mod tests {
     async fn test_generate_targets() -> Result<(), Box<dyn std::error::Error>> {
         let mut build_graph = GraphNode::default();
         build_graph.node_type = NodeType::RealNode;
+        build_graph.node_label = "src/main/protos".to_string();
         test_generate_targets_base(
             example_project_conf(),
-            build_graph,
+            vec![build_graph],
             "src/main/protos".to_string(),
             2,
             r#"load('@rules_proto//proto:defs.bzl', 'proto_library')
@@ -933,64 +971,85 @@ proto_library(
     visibility=['//visibility:public']
 )
         "#,
+            false,
         )
         .await
     }
 
     #[tokio::test]
     async fn test_generate_targets_with_secondaries() -> Result<(), Box<dyn std::error::Error>> {
-        let mut build_graph = GraphNode::default();
-        build_graph.node_type = NodeType::RealNode;
-        build_graph
+        let mut node1 = GraphNode::default();
+        node1.node_label = "src/main/protos/a.proto".to_string();
+        node1.node_type = NodeType::RealNode;
+
+        let mut node2 = GraphNode::default();
+        node2.node_label = "src/main/protos/b.proto".to_string();
+        node2.node_type = NodeType::RealNode;
+        node2
             .dependencies
-            .push("src/main/protos/foo".to_string());
+            .push("src/main/protos/a.proto".to_string());
         test_generate_targets_base(
             example_project_conf_with_secondaries(),
-            build_graph,
+            vec![node1, node2],
             "src/main/protos".to_string(),
-            4,
+            6,
             r#"load('@com_google_protobuf//:protobuf.bzl', 'py_proto_library')
 load('@rules_proto//proto:defs.bzl', 'proto_library')
 
-filegroup(
-    name='protos_files',
-    srcs=glob(include=['**/*.proto']),
-    visibility=['//visibility:public']
-)
-
 proto_library(
-    name='protos',
-    srcs=[':protos_files'],
-    deps=['//src/main/protos/foo'],
+    name='a_proto',
+    srcs=['a.proto'],
     visibility=['//visibility:public']
 )
 
 java_proto_library(
-    name='protos_java',
-    deps=[':protos'],
+    name='a_proto_java',
+    deps=[':a_proto'],
     visibility=['//visibility:public']
 )
 
 py_proto_library(
-    name='protos_py',
-    srcs=[':protos_files'],
-    deps=['//src/main/protos/foo:foo_py'],
+    name='a_proto_py',
+    srcs=['a.proto'],
+    deps=[],
+    visibility=['//visibility:public']
+)
+
+proto_library(
+    name='b_proto',
+    srcs=['b.proto'],
+    deps=['//src/main/protos:a_proto'],
+    visibility=['//visibility:public']
+)
+
+java_proto_library(
+    name='b_proto_java',
+    deps=[':b_proto'],
+    visibility=['//visibility:public']
+)
+
+py_proto_library(
+    name='b_proto_py',
+    srcs=['b.proto'],
+    deps=['//src/main/protos:a_proto_py'],
     visibility=['//visibility:public']
 )
         "#,
+            true,
         )
         .await
     }
 
     async fn test_generate_targets_base(
         project_conf: ProjectConf,
-        build_graph: GraphNode,
+        build_graph: Vec<GraphNode>,
         element: String,
         expected_target_count: usize,
         expected_build_file: &str,
+        no_aggregate_source: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut emitted_files: Vec<PathBuf> = Vec::default();
-        let opt = Box::leak(Box::new(example_opt()));
+        let opt = Box::leak(Box::new(example_opt(no_aggregate_source)));
         let boxed_project_conf = Box::leak(Box::new(project_conf));
         let target_entries = generate_targets(
             opt,
