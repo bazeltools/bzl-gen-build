@@ -138,47 +138,62 @@ function run_system_apps() {
         echo "Must supply a config file, like the bazel_jvm_modules.json" 1>&2
         exit 1
     fi
-
     if [ ! -f "$CFG" ]; then
         echo "Config argument must be a file, given $CFG" 1>&2
         exit 1
+    fi
+    shift
+    GLOBAL_FLAG=
+    if (( $# > 0 )); then
+        if [[ "$1" == "--no-aggregate-source" ]]; then
+            GLOBAL_FLAG="--no-aggregate-source";
+        fi
+        shift
     fi
 
     set -ex
     ${TOOLING_WORKING_DIRECTORY}/system-driver-app \
         --input-path $CFG \
         --working-directory $REPO_ROOT \
+        $GLOBAL_FLAG \
         --cache-path ${BZL_GEN_BUILD_CACHE_PATH} extract \
         --extractor protos:${TOOLING_WORKING_DIRECTORY}/protos-entity-extractor \
         --extractor scala:${TOOLING_WORKING_DIRECTORY}/scala-entity-extractor \
         --external-generated-root ${TMP_WORKING_STATE}/external_files \
         --extractor java:${TOOLING_WORKING_DIRECTORY}/java-entity-extractor \
         --extractor python:${TOOLING_WORKING_DIRECTORY}/python-entity-extractor \
-        --extracted-mappings ${TMP_WORKING_STATE}/extracted_mappings.json
+        --extracted-mappings ${TMP_WORKING_STATE}/extracted_mappings.json \
+        $@
 
     ${TOOLING_WORKING_DIRECTORY}/system-driver-app \
         --input-path $CFG \
         --working-directory $REPO_ROOT \
         --cache-path ${BZL_GEN_BUILD_CACHE_PATH} \
+        $GLOBAL_FLAG \
         extract-defs \
         --extracted-mappings ${TMP_WORKING_STATE}/extracted_mappings.json \
-        --extracted-defs ${TMP_WORKING_STATE}/extracted_defs.json
+        --extracted-defs ${TMP_WORKING_STATE}/extracted_defs.json \
+        $@
 
     ${TOOLING_WORKING_DIRECTORY}/system-driver-app \
         --input-path $CFG \
         --working-directory $REPO_ROOT  \
         --cache-path ${BZL_GEN_BUILD_CACHE_PATH} \
+        $GLOBAL_FLAG \
         build-graph \
         --extracted-mappings ${TMP_WORKING_STATE}/extracted_mappings.json \
         --extracted-defs ${TMP_WORKING_STATE}/extracted_defs.json \
-        --graph-out ${TMP_WORKING_STATE}/graph_data.json
+        --graph-out ${TMP_WORKING_STATE}/graph_data.json \
+        $@
 
     ${TOOLING_WORKING_DIRECTORY}/system-driver-app \
         --input-path $CFG \
         --working-directory $REPO_ROOT \
         --cache-path ${BZL_GEN_BUILD_CACHE_PATH} \
+        $GLOBAL_FLAG \
         print-build \
-        --graph-data ${TMP_WORKING_STATE}/graph_data.json
+        --graph-data ${TMP_WORKING_STATE}/graph_data.json \
+        $@
     set +x
 }
 

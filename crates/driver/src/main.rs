@@ -87,6 +87,10 @@ pub struct Opt {
     #[clap(long)]
     cache_path: PathBuf,
 
+    /// generate one target per source file, instead of aggregating *.proto etc.
+    #[clap(long)]
+    no_aggregate_source: bool,
+
     #[command(subcommand)]
     command: Commands,
 }

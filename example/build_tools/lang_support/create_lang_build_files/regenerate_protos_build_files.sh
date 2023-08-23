@@ -15,4 +15,4 @@ source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/bzl_gen_buil
 
 log "generate core build files ($GEN_FLAVOR)"
 
-run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json"
+run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json" --no-aggregate-source
