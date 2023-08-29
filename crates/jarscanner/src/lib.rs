@@ -8,6 +8,7 @@ use std::io::BufWriter;
 use std::io::Write;
 use std::path::PathBuf;
 use zip::read::ZipArchive;
+use regex::Regex;
 
 use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
 
@@ -28,6 +29,7 @@ fn ends_in_class(file_name: &str) -> bool {
 
 fn file_name_to_class_names(
     file_name: &str,
+    re: &Regexes,
     buffer: &mut Vec<String>,
 ) -> Result<(), FileNameError> {
     if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
@@ -36,11 +38,11 @@ fn file_name_to_class_names(
         })?;
         let final_suffix = class_suffix.strip_suffix("$").unwrap_or(class_suffix);
 
-        let dotted = final_suffix
-            .replace(r"/$", r"/")
-            .replace("$", ".")
-            .replace(r"/", ".");
+        let end_slash = re.end_slash.replace_all(final_suffix, "/");
+        let dollar = re.dollar.replace_all(&end_slash, ".");
+        let dotted = re.slash.replace_all(&dollar, ".").to_string();
         let replace_pkg = dotted.replace(".package", "");
+
         if dotted.contains(".package") {
             buffer.push(dotted);
             buffer.push(replace_pkg);
@@ -54,14 +56,14 @@ fn file_name_to_class_names(
     }
 }
 
-fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerError> {
+fn read_zip_archive(input_jar: &PathBuf, re: &Regexes) -> Result<HashSet<String>, JarscannerError> {
     let file = File::open(input_jar)?;
     let archive = ZipArchive::new(file)?;
 
     let mut result = HashSet::new();
     let mut buf = Vec::new();
     for file_name in archive.file_names() {
-        match file_name_to_class_names(file_name, &mut buf) {
+        match file_name_to_class_names(file_name, &re, &mut buf) {
             Ok(()) => (),
             Err(err) => return Err(JarscannerError::from(err)),
         }
@@ -85,13 +87,33 @@ fn filter_prefixes(
     }
 }
 
+struct Regexes {
+    end_slash: Regex,
+    dollar: Regex,
+    slash: Regex,
+}
+
+impl Regexes {
+    fn new() -> Self {
+        Self {
+            end_slash: Regex::new(r"/$").unwrap(),
+            dollar: Regex::new(r"\$").unwrap(),
+            slash: Regex::new(r"/").unwrap(),
+        }
+    }
+}
+
 pub fn process_input(
     label: &str,
     input_jar: &PathBuf,
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
 ) -> Result<ExtractedData, JarscannerError> {
-    let raw_classes = read_zip_archive(input_jar)?;
+
+
+    let re = Regexes::new();
+
+    let raw_classes = read_zip_archive(input_jar, &re)?;
     let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
 
     Ok(ExtractedData {
