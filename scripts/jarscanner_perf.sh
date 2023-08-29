@@ -33,7 +33,7 @@ RUST_PROJECT_DIR="./crates"
 # Build the Rust project
 echo "Building Rust project..."
 cd $RUST_PROJECT_DIR
-cargo build
+cargo build --release
 if [ $? -ne 0 ]; then
   echo "Failed to build Rust project."
   exit 1

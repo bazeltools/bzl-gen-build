@@ -59,11 +59,12 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerEr
     let mut buf = Vec::new();
     for file_name in archive.file_names() {
         match file_name_to_class_names(file_name, &mut buf) {
-            Ok(()) => result.extend(buf.drain(..)),
+            Ok(()) => (),
             Err(err) => return Err(JarscannerError::from(err))
         }
     }
 
+    result.extend(buf.drain(..));
     Ok(result)
 }
 
