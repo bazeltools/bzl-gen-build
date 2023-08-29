@@ -312,7 +312,6 @@ version = "0.1.0"
 dependencies = [
  "bzl_gen_build_shared_types",
  "clap",
- "regex",
  "serde",
  "serde_json",
  "tempfile",
