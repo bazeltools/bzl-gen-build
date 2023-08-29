@@ -32,7 +32,7 @@ impl ProtobufSource {
                         quoted.next();
                         quoted.next_back();
                         match Self::well_known_target(&quoted.as_str()) {
-                            Some(well_known) => well_known_refs.push(well_known.to_string()),
+                            Some(well_known) => well_known_refs.push(well_known),
                             None => buf.push(quoted.as_str().to_string()),
                         }
                     }
