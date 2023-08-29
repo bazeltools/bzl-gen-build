@@ -4,7 +4,7 @@ use crate::errors::JarscannerError;
 use std::collections::{HashMap, HashSet};
 
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, BufReader};
 use std::io::Write;
 use std::path::PathBuf;
 use zip::read::ZipArchive;
@@ -58,7 +58,8 @@ fn file_name_to_class_names(
 
 fn read_zip_archive(input_jar: &PathBuf, re: &Regexes) -> Result<HashSet<String>, JarscannerError> {
     let file = File::open(input_jar)?;
-    let archive = ZipArchive::new(file)?;
+    let reader = BufReader::with_capacity(32000, file);
+    let archive = ZipArchive::new(reader)?;
 
     let mut result = HashSet::new();
     let mut buf = Vec::new();
@@ -109,7 +110,6 @@ pub fn process_input(
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
 ) -> Result<ExtractedData, JarscannerError> {
-
 
     let re = Regexes::new();
 
