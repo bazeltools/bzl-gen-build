@@ -1,4 +1,5 @@
 use crate::errors::FileNameError;
+use crate::errors::JarscannerError;
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -47,7 +48,7 @@ fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameErro
     }
 }
 
-fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, Box<dyn Error>> {
+fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerError> {
     let file = File::open(input_jar)?;
     let archive = ZipArchive::new(file)?;
 
@@ -55,7 +56,7 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, Box<dyn Erro
     for file_name in archive.file_names() {
         match file_name_to_class_names(file_name) {
             Ok(class_names) => result.extend(class_names.into_iter()),
-            Err(err) => return Err(Box::new(err)),
+            Err(err) => return Err(JarscannerError::from(err))
         }
     }
 
@@ -81,7 +82,7 @@ pub fn process_input(
     input_jar: &PathBuf,
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
-) -> Result<ExtractedData, Box<dyn Error>> {
+) -> Result<ExtractedData, JarscannerError> {
     let raw_classes = read_zip_archive(input_jar)?;
     let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
 
@@ -99,7 +100,7 @@ pub fn process_input(
 pub fn emit_result(
     target_descriptor: &ExtractedData,
     output_path: &PathBuf,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), JarscannerError> {
     let json = serde_json::to_string_pretty(target_descriptor)?;
     let mut file = File::create(output_path)?;
     file.write_all(json.as_bytes())?;

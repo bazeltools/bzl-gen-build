@@ -1,5 +1,8 @@
 use std::error::Error;
 use std::fmt;
+use std::io;
+use serde_json;
+use zip::result::ZipError;
 
 #[derive(Debug)]
 pub struct FileNameError {
@@ -52,3 +55,56 @@ impl fmt::Debug for LabelToAllowedPrefixesError {
 }
 
 impl Error for LabelToAllowedPrefixesError {}
+
+#[derive(Debug)]
+pub enum JarscannerError {
+    IoError(io::Error),
+    ZipError(ZipError),
+    SerdeError(serde_json::Error),
+    FileNameError(FileNameError),
+    LabelToAllowedPrefixesError(LabelToAllowedPrefixesError)
+}
+
+impl fmt::Display for JarscannerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            JarscannerError::IoError(e) => write!(f, "IO error: {}", e),
+            JarscannerError::ZipError(e) => write!(f, "ZIP error: {}", e),
+            JarscannerError::SerdeError(e) => write!(f, "Serialization error: {}", e),
+            JarscannerError::FileNameError(e) => write!(f, "File name error: {}", e),
+            JarscannerError::LabelToAllowedPrefixesError(e) => write!(f, "Label to allowed prefixes error: {}", e),
+        }
+    }
+}
+
+impl Error for JarscannerError {}
+
+impl From<io::Error> for JarscannerError {
+    fn from(err: io::Error) -> JarscannerError {
+        JarscannerError::IoError(err)
+    }
+}
+
+impl From<ZipError> for JarscannerError {
+    fn from(err: ZipError) -> JarscannerError {
+        JarscannerError::ZipError(err)
+    }
+}
+
+impl From<serde_json::Error> for JarscannerError {
+    fn from(err: serde_json::Error) -> JarscannerError {
+        JarscannerError::SerdeError(err)
+    }
+}
+
+impl From<FileNameError> for JarscannerError {
+    fn from(err: FileNameError) -> JarscannerError {
+        JarscannerError::FileNameError(err)
+    }
+}
+
+impl From<LabelToAllowedPrefixesError> for JarscannerError {
+    fn from(err: LabelToAllowedPrefixesError) -> JarscannerError {
+        JarscannerError::LabelToAllowedPrefixesError(err)
+    }
+}
