@@ -4,11 +4,10 @@ use crate::errors::JarscannerError;
 use std::collections::{HashMap, HashSet};
 
 use std::fs::File;
-use std::io::{BufWriter, BufReader};
 use std::io::Write;
+use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 use zip::read::ZipArchive;
-use regex::Regex;
 
 use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
 
@@ -28,27 +27,48 @@ fn ends_in_class(file_name: &str) -> bool {
 }
 
 fn file_name_to_class_names(
-    file_name: &str,
-    re: &Regexes,
+    file_name_ref: &str,
     buffer: &mut Vec<String>,
 ) -> Result<(), FileNameError> {
-    if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
-        let class_suffix = file_name.strip_suffix(".class").ok_or_else(|| {
-            FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
-        })?;
-        let final_suffix = class_suffix.strip_suffix("$").unwrap_or(class_suffix);
+    if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
+        let length_of_name = file_name_ref.len();
+        let mut file_name_res = String::with_capacity(length_of_name);
+        let mut was_slash = false;
+        let mut idx = 0;
+        // We know this ends in .class, so we're going to need to track the index of the last 6 chars
+        let end_idx = length_of_name - 6;
+        for file_char in file_name_ref.chars() {
+            if idx == end_idx {
+                break;
+            }
 
-        let end_slash = re.end_slash.replace_all(final_suffix, "/");
-        let dollar = re.dollar.replace_all(&end_slash, ".");
-        let dotted = re.slash.replace_all(&dollar, ".").to_string();
-        let replace_pkg = dotted.replace(".package", "");
+            match file_char {
+                '/' => {
+                    was_slash = true;
+                    file_name_res.push('.')
+                }
+                '$' => {
+                    if idx == end_idx - 1 {
+                        // Do nothing
+                    } else if !was_slash {
+                        was_slash = false;
+                        file_name_res.push('.')
+                    }
+                }
+                _ => {
+                    was_slash = false;
+                    file_name_res.push(file_char)
+                }
+            }
+            idx += 1;
+        }
 
-        if dotted.contains(".package") {
-            buffer.push(dotted);
-            buffer.push(replace_pkg);
+        if file_name_res.contains(".package") {
+            buffer.push(file_name_res.clone());
+            buffer.push(file_name_res.replace(".package", ""));
             Ok(())
         } else {
-            buffer.push(dotted);
+            buffer.push(file_name_res);
             Ok(())
         }
     } else {
@@ -56,7 +76,7 @@ fn file_name_to_class_names(
     }
 }
 
-fn read_zip_archive(input_jar: &PathBuf, re: &Regexes) -> Result<HashSet<String>, JarscannerError> {
+fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerError> {
     let file = File::open(input_jar)?;
     let reader = BufReader::with_capacity(32000, file);
     let archive = ZipArchive::new(reader)?;
@@ -64,7 +84,7 @@ fn read_zip_archive(input_jar: &PathBuf, re: &Regexes) -> Result<HashSet<String>
     let mut result = HashSet::new();
     let mut buf = Vec::new();
     for file_name in archive.file_names() {
-        match file_name_to_class_names(file_name, &re, &mut buf) {
+        match file_name_to_class_names(file_name, &mut buf) {
             Ok(()) => (),
             Err(err) => return Err(JarscannerError::from(err)),
         }
@@ -88,32 +108,13 @@ fn filter_prefixes(
     }
 }
 
-struct Regexes {
-    end_slash: Regex,
-    dollar: Regex,
-    slash: Regex,
-}
-
-impl Regexes {
-    fn new() -> Self {
-        Self {
-            end_slash: Regex::new(r"/$").unwrap(),
-            dollar: Regex::new(r"\$").unwrap(),
-            slash: Regex::new(r"/").unwrap(),
-        }
-    }
-}
-
 pub fn process_input(
     label: &str,
     input_jar: &PathBuf,
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
 ) -> Result<ExtractedData, JarscannerError> {
-
-    let re = Regexes::new();
-
-    let raw_classes = read_zip_archive(input_jar, &re)?;
+    let raw_classes = read_zip_archive(input_jar)?;
     let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
 
     Ok(ExtractedData {
