@@ -2,7 +2,6 @@ use crate::errors::FileNameError;
 use crate::errors::JarscannerError;
 
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -26,7 +25,7 @@ fn ends_in_class(file_name: &str) -> bool {
     file_name.ends_with(".class")
 }
 
-fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameError> {
+fn file_name_to_class_names(file_name: &str, buffer: &mut Vec<String>) -> Result<(), FileNameError> {
     if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
         let class_suffix = file_name.strip_suffix(".class").ok_or_else(|| {
             FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
@@ -39,12 +38,15 @@ fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameErro
             .replace(r"/", ".");
         let replace_pkg = dotted.replace(".package", "");
         if dotted.contains(".package") {
-            Ok(vec![dotted, replace_pkg])
+            buffer.push(dotted);
+            buffer.push(replace_pkg);
+            Ok(())
         } else {
-            Ok(vec![dotted])
+            buffer.push(dotted);
+            Ok(())
         }
     } else {
-        Ok(vec![])
+        Ok(())
     }
 }
 
@@ -53,9 +55,10 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerEr
     let archive = ZipArchive::new(file)?;
 
     let mut result = HashSet::new();
+    let mut buf = Vec::new();
     for file_name in archive.file_names() {
-        match file_name_to_class_names(file_name) {
-            Ok(class_names) => result.extend(class_names.into_iter()),
+        match file_name_to_class_names(file_name, &mut buf) {
+            Ok(()) => result.extend(buf.drain(..)),
             Err(err) => return Err(JarscannerError::from(err))
         }
     }
