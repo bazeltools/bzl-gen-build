@@ -4,7 +4,8 @@ use crate::errors::JarscannerError;
 use std::collections::{HashMap, HashSet};
 
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::BufWriter;
+use std::io::Write;
 use std::path::PathBuf;
 use zip::read::ZipArchive;
 
@@ -105,8 +106,9 @@ pub fn emit_result(
     output_path: &PathBuf,
 ) -> Result<(), JarscannerError> {
     let json = serde_json::to_string_pretty(target_descriptor)?;
-    let mut file = File::create(output_path)?;
-    file.write_all(json.as_bytes())?;
+    let file = File::create(output_path)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(json.as_bytes())?;
     Ok(())
 }
 
