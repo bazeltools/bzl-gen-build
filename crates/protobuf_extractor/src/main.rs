@@ -89,6 +89,14 @@ async fn main() -> Result<()> {
         if !opt.disable_ref_generation {
             refs.extend(program.imports);
         }
+        if !program.well_known_refs.is_empty() {
+            bzl_gen_build_commands.extend(
+                program
+                    .well_known_refs
+                    .into_iter()
+                    .map(|x| format!("manual_ref:{}", x)),
+            )
+        }
 
         // See https://protobuf.dev/programming-guides/proto3/#importing
         // Protobuf uses file path relative to the workspace as a way of importing:
