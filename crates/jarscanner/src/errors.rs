@@ -1,7 +1,7 @@
+use serde_json;
 use std::error::Error;
 use std::fmt;
 use std::io;
-use serde_json;
 use zip::result::ZipError;
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ pub enum JarscannerError {
     ZipError(ZipError),
     SerdeError(serde_json::Error),
     FileNameError(FileNameError),
-    LabelToAllowedPrefixesError(LabelToAllowedPrefixesError)
+    LabelToAllowedPrefixesError(LabelToAllowedPrefixesError),
 }
 
 impl fmt::Display for JarscannerError {
@@ -72,7 +72,9 @@ impl fmt::Display for JarscannerError {
             JarscannerError::ZipError(e) => write!(f, "ZIP error: {}", e),
             JarscannerError::SerdeError(e) => write!(f, "Serialization error: {}", e),
             JarscannerError::FileNameError(e) => write!(f, "File name error: {}", e),
-            JarscannerError::LabelToAllowedPrefixesError(e) => write!(f, "Label to allowed prefixes error: {}", e),
+            JarscannerError::LabelToAllowedPrefixesError(e) => {
+                write!(f, "Label to allowed prefixes error: {}", e)
+            }
         }
     }
 }

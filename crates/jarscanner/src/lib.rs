@@ -26,7 +26,10 @@ fn ends_in_class(file_name: &str) -> bool {
     file_name.ends_with(".class")
 }
 
-fn file_name_to_class_names(file_name: &str, buffer: &mut Vec<String>) -> Result<(), FileNameError> {
+fn file_name_to_class_names(
+    file_name: &str,
+    buffer: &mut Vec<String>,
+) -> Result<(), FileNameError> {
     if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
         let class_suffix = file_name.strip_suffix(".class").ok_or_else(|| {
             FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
@@ -60,7 +63,7 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerEr
     for file_name in archive.file_names() {
         match file_name_to_class_names(file_name, &mut buf) {
             Ok(()) => (),
-            Err(err) => return Err(JarscannerError::from(err))
+            Err(err) => return Err(JarscannerError::from(err)),
         }
     }
 
@@ -120,53 +123,62 @@ mod tests {
     #[test]
     fn test_transform_path_to_jar() {
         let empty_vec: Vec<String> = vec![];
+        let mut buf = Vec::new();
 
         // Files that should be ignored
-        assert_eq!(
-            file_name_to_class_names("META-INF/services/java.time.chrono.Chronology").unwrap(),
-            empty_vec
-        );
+        file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut buf)
+            .unwrap();
+        assert_eq!(buf, empty_vec);
+
         // Make sure we're respecting that slash
-        assert_eq!(
-            file_name_to_class_names("META-INFO/services/java.time.chrono.Chronology.class")
-                .unwrap(),
-            vec!["META-INFO.services.java.time.chrono.Chronology"]
-        );
-        assert_eq!(
-            file_name_to_class_names("foo/bar/baz/doo.txt").unwrap(),
-            empty_vec
-        );
+        file_name_to_class_names(
+            "META-INFO/services/java.time.chrono.Chronology.class",
+            &mut buf,
+        )
+        .unwrap();
+        assert_eq!(buf, vec!["META-INFO.services.java.time.chrono.Chronology"]);
+
+        buf.clear();
+        file_name_to_class_names("foo/bar/baz/doo.txt", &mut buf).unwrap();
+        assert_eq!(buf, empty_vec);
 
         // Anon classes that should be ignored
-        assert_eq!(
-            file_name_to_class_names("scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class")
-                .unwrap(),
-            empty_vec
-        );
-        assert_eq!(
-            file_name_to_class_names(
-                "autovalue/shaded/com/google$/common/reflect/$Reflection.class"
-            )
-            .unwrap(),
-            empty_vec
-        );
+        buf.clear();
+        file_name_to_class_names(
+            "scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class",
+            &mut buf,
+        )
+        .unwrap();
+        assert_eq!(buf, empty_vec);
+
+        buf.clear();
+        file_name_to_class_names(
+            "autovalue/shaded/com/google$/common/reflect/$Reflection.class",
+            &mut buf,
+        )
+        .unwrap();
+        assert_eq!(buf, empty_vec);
 
         // We should pick up classes
+        buf.clear();
+        file_name_to_class_names(
+            "software/amazon/eventstream/HeaderValue$LongValue.class",
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(
-            file_name_to_class_names("software/amazon/eventstream/HeaderValue$LongValue.class")
-                .unwrap(),
+            buf,
             vec!["software.amazon.eventstream.HeaderValue.LongValue"]
         );
 
         // We should pick up package objects
-        assert_eq!(
-            file_name_to_class_names("scala/runtime/package$.class").unwrap(),
-            vec!["scala.runtime.package", "scala.runtime"]
-        );
-        assert_eq!(
-            file_name_to_class_names("scala/runtime/package.class").unwrap(),
-            vec!["scala.runtime.package", "scala.runtime"]
-        );
+        buf.clear();
+        file_name_to_class_names("scala/runtime/package$.class", &mut buf).unwrap();
+        assert_eq!(buf, vec!["scala.runtime.package", "scala.runtime"]);
+
+        buf.clear();
+        file_name_to_class_names("scala/runtime/package.class", &mut buf).unwrap();
+        assert_eq!(buf, vec!["scala.runtime.package", "scala.runtime"]);
     }
 
     #[test]
