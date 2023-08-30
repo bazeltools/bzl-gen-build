@@ -28,7 +28,7 @@ fn file_name_to_class_names(file_name_ref: &str, result: &mut BTreeSet<String>) 
     if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
         let length_of_name = file_name_ref.len();
         let mut file_name_res = String::with_capacity(length_of_name);
-        let mut was_slash = false;
+        let mut was_dot = false;
         let mut saw_k = false;
         let mut saw_g = false;
         let mut idx = 0;
@@ -41,22 +41,22 @@ fn file_name_to_class_names(file_name_ref: &str, result: &mut BTreeSet<String>) 
 
             match file_char {
                 '/' => {
-                    was_slash = true;
-                    file_name_res.push('.')
+                    file_name_res.push('.');
+                    was_dot = true;
                 }
                 '$' => {
                     if idx == end_idx - 1 {
                         // Do nothing
-                    } else if !was_slash {
-                        was_slash = false;
-                        file_name_res.push('.')
+                    } else if !was_dot {
+                        file_name_res.push('.');
+                        was_dot = true;
                     }
                 }
                 _ => {
                     saw_k |= file_char == 'k';
                     saw_g |= file_char == 'g';
-                    was_slash = false;
-                    file_name_res.push(file_char)
+                    file_name_res.push(file_char);
+                    was_dot = false;
                 }
             }
             idx += 1;
@@ -192,6 +192,29 @@ mod tests {
         let mut vec_expected = set.iter().collect::<Vec<_>>();
         vec_expected.sort();
         assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
+
+        // We should handle the /$ pattern correctly
+        set.clear();
+        file_name_to_class_names("scala/collection/immutable/$colon$colon$.class", &mut set);
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
+        assert_eq!(
+            vec_expected,
+            vec!["scala.collection.immutable.colon.colon",]
+        );
+
+        // We should handle double $$ correctly
+        set.clear();
+        file_name_to_class_names(
+            "scala/collection/immutable/Stream$$hash$colon$colon$.class",
+            &mut set,
+        );
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
+        assert_eq!(
+            vec_expected,
+            vec!["scala.collection.immutable.Stream.hash.colon.colon",]
+        );
     }
 
     #[test]
