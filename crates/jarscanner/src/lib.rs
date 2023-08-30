@@ -34,6 +34,7 @@ fn file_name_to_class_names(
         let mut file_name_res = String::with_capacity(length_of_name);
         let mut was_slash = false;
         let mut saw_k = false;
+        let mut saw_g = false;
         let mut idx = 0;
         // We know this ends in .class, so we're going to need to track the index of the last 6 chars
         let end_idx = length_of_name - 6;
@@ -58,6 +59,7 @@ fn file_name_to_class_names(
                 }
                 _ => {
                     saw_k |= file_char == 'k';
+                    saw_g |= file_char == 'g';
                     was_slash = false;
                     file_name_res.push(file_char)
                 }
@@ -65,7 +67,7 @@ fn file_name_to_class_names(
             idx += 1;
         }
 
-        if saw_k && file_name_res.contains(".package") {
+        if saw_k && saw_g && file_name_res.contains(".package") {
             result.insert(file_name_res.replace(".package", ""));
             result.insert(file_name_res);
         } else {
@@ -125,11 +127,9 @@ pub fn emit_result(
     target_descriptor: &ExtractedData,
     output_path: &PathBuf,
 ) -> Result<(), JarscannerError> {
-    // Note: we tried using to_writer_pretty here, and it was slower!
-    let json = serde_json::to_string_pretty(target_descriptor)?;
     let file = File::create(output_path)?;
-    let mut writer = BufWriter::new(file);
-    writer.write_all(json.as_bytes())?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, target_descriptor)?;
     Ok(())
 }
 

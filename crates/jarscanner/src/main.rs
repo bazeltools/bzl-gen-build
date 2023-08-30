@@ -32,22 +32,29 @@ struct Opt {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let opt = Opt::parse();
 
-    let label_to_allowed_prefixes: HashMap<String, Vec<String>> =
-        match opt.label_to_allowed_prefixes {
-            Some(lp) => serde_json::from_str(&lp).map_err(|e| LabelToAllowedPrefixesError {
-                json_deser_error: e.to_string(),
-            })?,
-            None => HashMap::new(),
-        };
+    let mut idx = 0;
+    while idx < 1000 {
 
-    let target_descriptor = jarscanner::process_input(
-        &opt.label,
-        &opt.input_jar,
-        &opt.relative_path,
-        &label_to_allowed_prefixes,
-    )?;
-    jarscanner::emit_result(&target_descriptor, &opt.out)?;
+        let opt = Opt::parse();
+
+        let label_to_allowed_prefixes: HashMap<String, Vec<String>> =
+            match opt.label_to_allowed_prefixes {
+                Some(lp) => serde_json::from_str(&lp).map_err(|e| LabelToAllowedPrefixesError {
+                    json_deser_error: e.to_string(),
+                })?,
+                None => HashMap::new(),
+            };
+
+        let target_descriptor = jarscanner::process_input(
+            &opt.label,
+            &opt.input_jar,
+            &opt.relative_path,
+            &label_to_allowed_prefixes,
+        )?;
+        jarscanner::emit_result(&target_descriptor, &opt.out)?;
+        idx += 1;
+
+    }
     Ok(())
 }
