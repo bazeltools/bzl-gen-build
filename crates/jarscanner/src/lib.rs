@@ -1,4 +1,3 @@
-use crate::errors::FileNameError;
 use crate::errors::JarscannerError;
 
 use std::collections::{HashMap, HashSet};
@@ -29,7 +28,7 @@ fn ends_in_class(file_name: &str) -> bool {
 fn file_name_to_class_names(
     file_name_ref: &str,
     result: &mut HashSet<String>,
-) -> Result<(), FileNameError> {
+) {
     if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
         let length_of_name = file_name_ref.len();
         let mut file_name_res = String::with_capacity(length_of_name);
@@ -66,13 +65,9 @@ fn file_name_to_class_names(
         if file_name_res.contains(".package") {
             result.insert(file_name_res.clone());
             result.insert(file_name_res.replace(".package", ""));
-            Ok(())
         } else {
             result.insert(file_name_res);
-            Ok(())
         }
-    } else {
-        Ok(())
     }
 }
 
@@ -83,10 +78,7 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerEr
 
     let mut result = HashSet::new();
     for file_name in archive.file_names() {
-        match file_name_to_class_names(file_name, &mut result) {
-            Ok(()) => (),
-            Err(err) => return Err(JarscannerError::from(err)),
-        }
+        file_name_to_class_names(file_name, &mut result);
     }
 
     Ok(result)
@@ -148,23 +140,21 @@ mod tests {
         let mut set = HashSet::new();
 
         // Files that should be ignored
-        file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut set)
-            .unwrap();
+        file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut set);
         assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         // Make sure we're respecting that slash
         file_name_to_class_names(
             "META-INFO/services/java.time.chrono.Chronology.class",
             &mut set,
-        )
-        .unwrap();
+        );
         assert_eq!(
             set.iter().collect::<Vec<_>>(),
             vec!["META-INFO.services.java.time.chrono.Chronology"]
         );
 
         set.clear();
-        file_name_to_class_names("foo/bar/baz/doo.txt", &mut set).unwrap();
+        file_name_to_class_names("foo/bar/baz/doo.txt", &mut set);
         assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         // Anon classes that should be ignored
@@ -172,16 +162,14 @@ mod tests {
         file_name_to_class_names(
             "scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class",
             &mut set,
-        )
-        .unwrap();
+        );
         assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         set.clear();
         file_name_to_class_names(
             "autovalue/shaded/com/google$/common/reflect/$Reflection.class",
             &mut set,
-        )
-        .unwrap();
+        );
         assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         // We should pick up classes
@@ -189,8 +177,7 @@ mod tests {
         file_name_to_class_names(
             "software/amazon/eventstream/HeaderValue$LongValue.class",
             &mut set,
-        )
-        .unwrap();
+        );
         assert_eq!(
             set.iter().collect::<Vec<_>>(),
             vec!["software.amazon.eventstream.HeaderValue.LongValue"]
@@ -198,13 +185,13 @@ mod tests {
 
         // We should pick up package objects
         set.clear();
-        file_name_to_class_names("scala/runtime/package$.class", &mut set).unwrap();
+        file_name_to_class_names("scala/runtime/package$.class", &mut set);
         let mut vec_expected = set.iter().collect::<Vec<_>>();
         vec_expected.sort();
         assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
 
         set.clear();
-        file_name_to_class_names("scala/runtime/package.class", &mut set).unwrap();
+        file_name_to_class_names("scala/runtime/package.class", &mut set);
         let mut vec_expected = set.iter().collect::<Vec<_>>();
         vec_expected.sort();
         assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
