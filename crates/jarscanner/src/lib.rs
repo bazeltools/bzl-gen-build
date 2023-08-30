@@ -63,8 +63,8 @@ fn file_name_to_class_names(
         }
 
         if file_name_res.contains(".package") {
-            result.insert(file_name_res.clone());
             result.insert(file_name_res.replace(".package", ""));
+            result.insert(file_name_res);
         } else {
             result.insert(file_name_res);
         }
