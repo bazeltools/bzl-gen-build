@@ -1,9 +1,8 @@
 use crate::errors::JarscannerError;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeSet};
 
 use std::fs::File;
-use std::io::Write;
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 use zip::read::ZipArchive;
@@ -27,7 +26,7 @@ fn ends_in_class(file_name: &str) -> bool {
 
 fn file_name_to_class_names(
     file_name_ref: &str,
-    result: &mut HashSet<String>,
+    result: &mut BTreeSet<String>,
 ) {
     if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
         let length_of_name = file_name_ref.len();
@@ -76,12 +75,12 @@ fn file_name_to_class_names(
     }
 }
 
-fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerError> {
+fn read_zip_archive(input_jar: &PathBuf) -> Result<BTreeSet<String>, JarscannerError> {
     let file = File::open(input_jar)?;
     let reader = BufReader::with_capacity(32000, file);
     let archive = ZipArchive::new(reader)?;
 
-    let mut result = HashSet::new();
+    let mut result = BTreeSet::new();
     for file_name in archive.file_names() {
         file_name_to_class_names(file_name, &mut result);
     }
@@ -91,15 +90,12 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerEr
 
 fn filter_prefixes(
     label: &str,
-    classes: HashSet<String>,
+    classes: &mut BTreeSet<String>,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
-) -> HashSet<String> {
+) {
     match label_to_allowed_prefixes.get(label) {
-        Some(prefix_set) => classes
-            .into_iter()
-            .filter(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix)))
-            .collect(),
-        None => classes,
+        Some(prefix_set) => classes.retain(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix))),
+        None => ()
     }
 }
 
@@ -109,8 +105,8 @@ pub fn process_input(
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
 ) -> Result<ExtractedData, JarscannerError> {
-    let raw_classes = read_zip_archive(input_jar)?;
-    let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
+    let mut classes = read_zip_archive(input_jar)?;
+    filter_prefixes(label, &mut classes, &label_to_allowed_prefixes);
 
     Ok(ExtractedData {
         label_or_repo_path: label.to_string(),
@@ -140,7 +136,7 @@ mod tests {
     #[test]
     fn test_transform_path_to_jar() {
         let empty_vec: Vec<&str> = vec![];
-        let mut set = HashSet::new();
+        let mut set = BTreeSet::new();
 
         // Files that should be ignored
         file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut set);
@@ -208,28 +204,30 @@ mod tests {
             vec!["com.netflix.iceberg.".to_string()],
         );
 
-        let mut classes = HashSet::new();
+        let mut classes = BTreeSet::new();
         classes.insert("bar".to_string());
         let expected = classes.clone();
 
+        filter_prefixes("foo", &mut classes, &label_to_allowed_prefixes);
         assert_eq!(
-            filter_prefixes("foo", classes, &label_to_allowed_prefixes),
+            classes,
             expected
         );
 
-        let mut filtered_classes = HashSet::new();
+        let mut filtered_classes = BTreeSet::new();
         filtered_classes.insert("com.netflix.iceberg.Foo".to_string());
         filtered_classes.insert("com.google.bar".to_string());
 
-        let mut expected = HashSet::new();
+        let mut expected = BTreeSet::new();
         expected.insert("com.netflix.iceberg.Foo".to_string());
 
+        filter_prefixes(
+            "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
+            &mut filtered_classes,
+            &label_to_allowed_prefixes
+        );
         assert_eq!(
-            filter_prefixes(
-                "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
-                filtered_classes,
-                &label_to_allowed_prefixes
-            ),
+            filtered_classes,
             expected
         );
     }
