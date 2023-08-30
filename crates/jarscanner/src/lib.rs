@@ -28,7 +28,7 @@ fn ends_in_class(file_name: &str) -> bool {
 
 fn file_name_to_class_names(
     file_name_ref: &str,
-    buffer: &mut Vec<String>,
+    result: &mut HashSet<String>,
 ) -> Result<(), FileNameError> {
     if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
         let length_of_name = file_name_ref.len();
@@ -64,11 +64,11 @@ fn file_name_to_class_names(
         }
 
         if file_name_res.contains(".package") {
-            buffer.push(file_name_res.clone());
-            buffer.push(file_name_res.replace(".package", ""));
+            result.insert(file_name_res.clone());
+            result.insert(file_name_res.replace(".package", ""));
             Ok(())
         } else {
-            buffer.push(file_name_res);
+            result.insert(file_name_res);
             Ok(())
         }
     } else {
@@ -82,15 +82,13 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, JarscannerEr
     let archive = ZipArchive::new(reader)?;
 
     let mut result = HashSet::new();
-    let mut buf = Vec::new();
     for file_name in archive.file_names() {
-        match file_name_to_class_names(file_name, &mut buf) {
+        match file_name_to_class_names(file_name, &mut result) {
             Ok(()) => (),
             Err(err) => return Err(JarscannerError::from(err)),
         }
     }
 
-    result.extend(buf.drain(..));
     Ok(result)
 }
 
@@ -132,6 +130,7 @@ pub fn emit_result(
     target_descriptor: &ExtractedData,
     output_path: &PathBuf,
 ) -> Result<(), JarscannerError> {
+    // Note: we tried using to_writer_pretty here, and it was slower!
     let json = serde_json::to_string_pretty(target_descriptor)?;
     let file = File::create(output_path)?;
     let mut writer = BufWriter::new(file);
@@ -145,63 +144,70 @@ mod tests {
 
     #[test]
     fn test_transform_path_to_jar() {
-        let empty_vec: Vec<String> = vec![];
-        let mut buf = Vec::new();
+        let empty_vec: Vec<&str> = vec![];
+        let mut set = HashSet::new();
 
         // Files that should be ignored
-        file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut buf)
+        file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut set)
             .unwrap();
-        assert_eq!(buf, empty_vec);
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         // Make sure we're respecting that slash
         file_name_to_class_names(
             "META-INFO/services/java.time.chrono.Chronology.class",
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf, vec!["META-INFO.services.java.time.chrono.Chronology"]);
-
-        buf.clear();
-        file_name_to_class_names("foo/bar/baz/doo.txt", &mut buf).unwrap();
-        assert_eq!(buf, empty_vec);
-
-        // Anon classes that should be ignored
-        buf.clear();
-        file_name_to_class_names(
-            "scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class",
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf, empty_vec);
-
-        buf.clear();
-        file_name_to_class_names(
-            "autovalue/shaded/com/google$/common/reflect/$Reflection.class",
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf, empty_vec);
-
-        // We should pick up classes
-        buf.clear();
-        file_name_to_class_names(
-            "software/amazon/eventstream/HeaderValue$LongValue.class",
-            &mut buf,
+            &mut set,
         )
         .unwrap();
         assert_eq!(
-            buf,
+            set.iter().collect::<Vec<_>>(),
+            vec!["META-INFO.services.java.time.chrono.Chronology"]
+        );
+
+        set.clear();
+        file_name_to_class_names("foo/bar/baz/doo.txt", &mut set).unwrap();
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
+
+        // Anon classes that should be ignored
+        set.clear();
+        file_name_to_class_names(
+            "scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class",
+            &mut set,
+        )
+        .unwrap();
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
+
+        set.clear();
+        file_name_to_class_names(
+            "autovalue/shaded/com/google$/common/reflect/$Reflection.class",
+            &mut set,
+        )
+        .unwrap();
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
+
+        // We should pick up classes
+        set.clear();
+        file_name_to_class_names(
+            "software/amazon/eventstream/HeaderValue$LongValue.class",
+            &mut set,
+        )
+        .unwrap();
+        assert_eq!(
+            set.iter().collect::<Vec<_>>(),
             vec!["software.amazon.eventstream.HeaderValue.LongValue"]
         );
 
         // We should pick up package objects
-        buf.clear();
-        file_name_to_class_names("scala/runtime/package$.class", &mut buf).unwrap();
-        assert_eq!(buf, vec!["scala.runtime.package", "scala.runtime"]);
+        set.clear();
+        file_name_to_class_names("scala/runtime/package$.class", &mut set).unwrap();
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
+        assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
 
-        buf.clear();
-        file_name_to_class_names("scala/runtime/package.class", &mut buf).unwrap();
-        assert_eq!(buf, vec!["scala.runtime.package", "scala.runtime"]);
+        set.clear();
+        file_name_to_class_names("scala/runtime/package.class", &mut set).unwrap();
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
+        assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
     }
 
     #[test]
