@@ -33,10 +33,12 @@ fn file_name_to_class_names(
         let length_of_name = file_name_ref.len();
         let mut file_name_res = String::with_capacity(length_of_name);
         let mut was_slash = false;
+        let mut saw_k = false;
         let mut idx = 0;
         // We know this ends in .class, so we're going to need to track the index of the last 6 chars
         let end_idx = length_of_name - 6;
         for file_char in file_name_ref.chars() {
+
             if idx == end_idx {
                 break;
             }
@@ -55,6 +57,7 @@ fn file_name_to_class_names(
                     }
                 }
                 _ => {
+                    saw_k |= file_char == 'k';
                     was_slash = false;
                     file_name_res.push(file_char)
                 }
@@ -62,7 +65,7 @@ fn file_name_to_class_names(
             idx += 1;
         }
 
-        if file_name_res.contains(".package") {
+        if saw_k && file_name_res.contains(".package") {
             result.insert(file_name_res.replace(".package", ""));
             result.insert(file_name_res);
         } else {
