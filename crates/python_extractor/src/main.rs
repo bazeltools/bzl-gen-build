@@ -1,4 +1,8 @@
-use std::{collections::{HashSet, BTreeSet}, path::PathBuf, time::Instant};
+use std::{
+    collections::{BTreeSet, HashSet},
+    path::PathBuf,
+    time::Instant,
+};
 
 use bzl_gen_build_python_utilities::PythonProgram;
 

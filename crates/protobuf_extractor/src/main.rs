@@ -2,7 +2,11 @@ use anyhow::{Context, Result};
 use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
 use clap::Parser;
 use log::debug;
-use std::{collections::{HashSet, BTreeSet}, path::PathBuf, time::Instant};
+use std::{
+    collections::{BTreeSet, HashSet},
+    path::PathBuf,
+    time::Instant,
+};
 
 mod extract_protobuf_imports;
 use extract_protobuf_imports::ProtobufSource;

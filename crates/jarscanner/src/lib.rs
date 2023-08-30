@@ -1,6 +1,6 @@
 use crate::errors::JarscannerError;
 
-use std::collections::{HashMap, HashSet, BTreeSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -24,10 +24,7 @@ fn ends_in_class(file_name: &str) -> bool {
     file_name.ends_with(".class")
 }
 
-fn file_name_to_class_names(
-    file_name_ref: &str,
-    result: &mut BTreeSet<String>,
-) {
+fn file_name_to_class_names(file_name_ref: &str, result: &mut BTreeSet<String>) {
     if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
         let length_of_name = file_name_ref.len();
         let mut file_name_res = String::with_capacity(length_of_name);
@@ -38,7 +35,6 @@ fn file_name_to_class_names(
         // We know this ends in .class, so we're going to need to track the index of the last 6 chars
         let end_idx = length_of_name - 6;
         for file_char in file_name_ref.chars() {
-
             if idx == end_idx {
                 break;
             }
@@ -94,8 +90,10 @@ fn filter_prefixes(
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
 ) {
     match label_to_allowed_prefixes.get(label) {
-        Some(prefix_set) => classes.retain(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix))),
-        None => ()
+        Some(prefix_set) => {
+            classes.retain(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix)))
+        }
+        None => (),
     }
 }
 
@@ -209,10 +207,7 @@ mod tests {
         let expected = classes.clone();
 
         filter_prefixes("foo", &mut classes, &label_to_allowed_prefixes);
-        assert_eq!(
-            classes,
-            expected
-        );
+        assert_eq!(classes, expected);
 
         let mut filtered_classes = BTreeSet::new();
         filtered_classes.insert("com.netflix.iceberg.Foo".to_string());
@@ -224,11 +219,8 @@ mod tests {
         filter_prefixes(
             "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
             &mut filtered_classes,
-            &label_to_allowed_prefixes
+            &label_to_allowed_prefixes,
         );
-        assert_eq!(
-            filtered_classes,
-            expected
-        );
+        assert_eq!(filtered_classes, expected);
     }
 }
