@@ -1,4 +1,8 @@
-use std::{collections::HashSet, path::PathBuf, time::Instant};
+use std::{
+    collections::{BTreeSet, HashSet},
+    path::PathBuf,
+    time::Instant,
+};
 
 use bzl_gen_build_python_utilities::PythonProgram;
 
@@ -69,7 +73,7 @@ async fn main() -> Result<()> {
     for relative_path in relative_input_paths {
         let input_file = opt.working_directory.join(&relative_path);
         let mut refs: HashSet<String> = Default::default();
-        let mut defs: HashSet<String> = Default::default();
+        let mut defs: BTreeSet<String> = Default::default();
         let mut bzl_gen_build_commands: HashSet<String> = Default::default();
 
         let input_str = std::fs::read_to_string(&input_file).with_context(|| {

@@ -1,10 +1,9 @@
-use crate::errors::FileNameError;
+use crate::errors::JarscannerError;
 
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 use zip::read::ZipArchive;
 
@@ -25,38 +24,61 @@ fn ends_in_class(file_name: &str) -> bool {
     file_name.ends_with(".class")
 }
 
-fn file_name_to_class_names(file_name: &str) -> Result<Vec<String>, FileNameError> {
-    if non_anon(file_name) && not_in_meta(file_name) && ends_in_class(file_name) {
-        let class_suffix = file_name.strip_suffix(".class").ok_or_else(|| {
-            FileNameError::new(format!("Failed to strip .class suffix for {}", file_name))
-        })?;
-        let final_suffix = class_suffix.strip_suffix("$").unwrap_or(class_suffix);
+fn file_name_to_class_names(file_name_ref: &str, result: &mut BTreeSet<String>) {
+    if non_anon(file_name_ref) && not_in_meta(file_name_ref) && ends_in_class(file_name_ref) {
+        let length_of_name = file_name_ref.len();
+        let mut file_name_res = String::with_capacity(length_of_name);
+        let mut was_dot = false;
+        let mut saw_k = false;
+        let mut saw_g = false;
+        let mut idx = 0;
+        // We know this ends in .class, so we're going to need to track the index of the last 6 chars
+        let end_idx = length_of_name - 6;
+        for file_char in file_name_ref.chars() {
+            if idx == end_idx {
+                break;
+            }
 
-        let dotted = final_suffix
-            .replace(r"/$", r"/")
-            .replace("$", ".")
-            .replace(r"/", ".");
-        let replace_pkg = dotted.replace(".package", "");
-        if dotted.contains(".package") {
-            Ok(vec![dotted, replace_pkg])
-        } else {
-            Ok(vec![dotted])
+            match file_char {
+                '/' => {
+                    file_name_res.push('.');
+                    was_dot = true;
+                }
+                '$' => {
+                    if idx == end_idx - 1 {
+                        // Do nothing
+                    } else if !was_dot {
+                        file_name_res.push('.');
+                        was_dot = true;
+                    }
+                }
+                _ => {
+                    saw_k |= file_char == 'k';
+                    saw_g |= file_char == 'g';
+                    file_name_res.push(file_char);
+                    was_dot = false;
+                }
+            }
+            idx += 1;
         }
-    } else {
-        Ok(vec![])
+
+        if saw_k && saw_g && file_name_res.contains(".package") {
+            result.insert(file_name_res.replace(".package", ""));
+            result.insert(file_name_res);
+        } else {
+            result.insert(file_name_res);
+        }
     }
 }
 
-fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, Box<dyn Error>> {
+fn read_zip_archive(input_jar: &PathBuf) -> Result<BTreeSet<String>, JarscannerError> {
     let file = File::open(input_jar)?;
-    let archive = ZipArchive::new(file)?;
+    let reader = BufReader::with_capacity(32000, file);
+    let archive = ZipArchive::new(reader)?;
 
-    let mut result = HashSet::new();
+    let mut result = BTreeSet::new();
     for file_name in archive.file_names() {
-        match file_name_to_class_names(file_name) {
-            Ok(class_names) => result.extend(class_names.into_iter()),
-            Err(err) => return Err(Box::new(err)),
-        }
+        file_name_to_class_names(file_name, &mut result);
     }
 
     Ok(result)
@@ -64,15 +86,14 @@ fn read_zip_archive(input_jar: &PathBuf) -> Result<HashSet<String>, Box<dyn Erro
 
 fn filter_prefixes(
     label: &str,
-    classes: HashSet<String>,
+    classes: &mut BTreeSet<String>,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
-) -> HashSet<String> {
+) {
     match label_to_allowed_prefixes.get(label) {
-        Some(prefix_set) => classes
-            .into_iter()
-            .filter(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix)))
-            .collect(),
-        None => classes,
+        Some(prefix_set) => {
+            classes.retain(|c| prefix_set.iter().any(|prefix| c.starts_with(prefix)))
+        }
+        None => (),
     }
 }
 
@@ -81,9 +102,9 @@ pub fn process_input(
     input_jar: &PathBuf,
     relative_path: &str,
     label_to_allowed_prefixes: &HashMap<String, Vec<String>>,
-) -> Result<ExtractedData, Box<dyn Error>> {
-    let raw_classes = read_zip_archive(input_jar)?;
-    let classes = filter_prefixes(label, raw_classes, &label_to_allowed_prefixes);
+) -> Result<ExtractedData, JarscannerError> {
+    let mut classes = read_zip_archive(input_jar)?;
+    filter_prefixes(label, &mut classes, &label_to_allowed_prefixes);
 
     Ok(ExtractedData {
         label_or_repo_path: label.to_string(),
@@ -99,10 +120,10 @@ pub fn process_input(
 pub fn emit_result(
     target_descriptor: &ExtractedData,
     output_path: &PathBuf,
-) -> Result<(), Box<dyn Error>> {
-    let json = serde_json::to_string_pretty(target_descriptor)?;
-    let mut file = File::create(output_path)?;
-    file.write_all(json.as_bytes())?;
+) -> Result<(), JarscannerError> {
+    let file = File::create(output_path)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, target_descriptor)?;
     Ok(())
 }
 
@@ -112,53 +133,87 @@ mod tests {
 
     #[test]
     fn test_transform_path_to_jar() {
-        let empty_vec: Vec<String> = vec![];
+        let empty_vec: Vec<&str> = vec![];
+        let mut set = BTreeSet::new();
 
         // Files that should be ignored
-        assert_eq!(
-            file_name_to_class_names("META-INF/services/java.time.chrono.Chronology").unwrap(),
-            empty_vec
-        );
+        file_name_to_class_names("META-INF/services/java.time.chrono.Chronology", &mut set);
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
+
         // Make sure we're respecting that slash
+        file_name_to_class_names(
+            "META-INFO/services/java.time.chrono.Chronology.class",
+            &mut set,
+        );
         assert_eq!(
-            file_name_to_class_names("META-INFO/services/java.time.chrono.Chronology.class")
-                .unwrap(),
+            set.iter().collect::<Vec<_>>(),
             vec!["META-INFO.services.java.time.chrono.Chronology"]
         );
-        assert_eq!(
-            file_name_to_class_names("foo/bar/baz/doo.txt").unwrap(),
-            empty_vec
-        );
+
+        set.clear();
+        file_name_to_class_names("foo/bar/baz/doo.txt", &mut set);
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         // Anon classes that should be ignored
-        assert_eq!(
-            file_name_to_class_names("scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class")
-                .unwrap(),
-            empty_vec
+        set.clear();
+        file_name_to_class_names(
+            "scala/util/matching/Regex$$anonfun$replaceSomeIn$1.class",
+            &mut set,
         );
-        assert_eq!(
-            file_name_to_class_names(
-                "autovalue/shaded/com/google$/common/reflect/$Reflection.class"
-            )
-            .unwrap(),
-            empty_vec
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
+
+        set.clear();
+        file_name_to_class_names(
+            "autovalue/shaded/com/google$/common/reflect/$Reflection.class",
+            &mut set,
         );
+        assert_eq!(set.iter().collect::<Vec<_>>(), empty_vec);
 
         // We should pick up classes
+        set.clear();
+        file_name_to_class_names(
+            "software/amazon/eventstream/HeaderValue$LongValue.class",
+            &mut set,
+        );
         assert_eq!(
-            file_name_to_class_names("software/amazon/eventstream/HeaderValue$LongValue.class")
-                .unwrap(),
+            set.iter().collect::<Vec<_>>(),
             vec!["software.amazon.eventstream.HeaderValue.LongValue"]
         );
 
         // We should pick up package objects
+        set.clear();
+        file_name_to_class_names("scala/runtime/package$.class", &mut set);
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
+        assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
+
+        set.clear();
+        file_name_to_class_names("scala/runtime/package.class", &mut set);
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
+        assert_eq!(vec_expected, vec!["scala.runtime", "scala.runtime.package"]);
+
+        // We should handle the /$ pattern correctly
+        set.clear();
+        file_name_to_class_names("scala/collection/immutable/$colon$colon$.class", &mut set);
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
         assert_eq!(
-            file_name_to_class_names("scala/runtime/package$.class").unwrap(),
-            vec!["scala.runtime.package", "scala.runtime"]
+            vec_expected,
+            vec!["scala.collection.immutable.colon.colon",]
         );
+
+        // We should handle double $$ correctly
+        set.clear();
+        file_name_to_class_names(
+            "scala/collection/immutable/Stream$$hash$colon$colon$.class",
+            &mut set,
+        );
+        let mut vec_expected = set.iter().collect::<Vec<_>>();
+        vec_expected.sort();
         assert_eq!(
-            file_name_to_class_names("scala/runtime/package.class").unwrap(),
-            vec!["scala.runtime.package", "scala.runtime"]
+            vec_expected,
+            vec!["scala.collection.immutable.Stream.hash.colon.colon",]
         );
     }
 
@@ -170,29 +225,25 @@ mod tests {
             vec!["com.netflix.iceberg.".to_string()],
         );
 
-        let mut classes = HashSet::new();
+        let mut classes = BTreeSet::new();
         classes.insert("bar".to_string());
         let expected = classes.clone();
 
-        assert_eq!(
-            filter_prefixes("foo", classes, &label_to_allowed_prefixes),
-            expected
-        );
+        filter_prefixes("foo", &mut classes, &label_to_allowed_prefixes);
+        assert_eq!(classes, expected);
 
-        let mut filtered_classes = HashSet::new();
+        let mut filtered_classes = BTreeSet::new();
         filtered_classes.insert("com.netflix.iceberg.Foo".to_string());
         filtered_classes.insert("com.google.bar".to_string());
 
-        let mut expected = HashSet::new();
+        let mut expected = BTreeSet::new();
         expected.insert("com.netflix.iceberg.Foo".to_string());
 
-        assert_eq!(
-            filter_prefixes(
-                "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
-                filtered_classes,
-                &label_to_allowed_prefixes
-            ),
-            expected
+        filter_prefixes(
+            "@jvm__com_netflix_iceberg__bdp_iceberg_spark_2_12//:jar",
+            &mut filtered_classes,
+            &label_to_allowed_prefixes,
         );
+        assert_eq!(filtered_classes, expected);
     }
 }

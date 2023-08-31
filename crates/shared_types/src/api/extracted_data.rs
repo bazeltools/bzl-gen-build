@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -11,8 +11,7 @@ pub struct ExtractedData {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataBlock {
     pub entity_path: String,
-    #[serde(serialize_with = "crate::serde_helpers::ordered_set")]
-    pub defs: HashSet<String>,
+    pub defs: BTreeSet<String>,
     #[serde(serialize_with = "crate::serde_helpers::ordered_set")]
     pub refs: HashSet<String>,
     #[serde(default, serialize_with = "crate::serde_helpers::ordered_set")]

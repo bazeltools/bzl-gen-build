@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -14,8 +14,7 @@ use crate::{
 pub struct TreeNode {
     pub label_or_repo_path: String,
 
-    #[serde(serialize_with = "crate::serde_helpers::ordered_set")]
-    pub defs: HashSet<String>,
+    pub defs: BTreeSet<String>,
 
     #[serde(serialize_with = "crate::serde_helpers::ordered_set")]
     pub refs: HashSet<String>,
@@ -43,7 +42,7 @@ impl TryFrom<crate::api::extracted_data::DataBlock> for TreeNode {
         let directives = Directive::from_strings(&value.bzl_gen_build_commands)?;
         let mut t = Self {
             label_or_repo_path: String::default(),
-            defs: value.defs.clone(),
+            defs: value.defs,
             refs: value.refs,
             ..Default::default()
         };
