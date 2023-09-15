@@ -344,6 +344,7 @@ dependencies = [
  "bzl_gen_build_python_utilities",
  "bzl_gen_build_shared_types",
  "clap",
+ "encoding_rs",
  "futures",
  "ignore",
  "lazy_static",
@@ -531,6 +532,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2e5d13ca2353ab7d0230988629def93914a8c4015f621f9b13ed2955614731d"
 dependencies = [
  "log",
+]
+
+[[package]]
+name = "encoding_rs"
+version = "0.8.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
