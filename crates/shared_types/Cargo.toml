@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 nom = "7.1.1"
-serde = { version = "1.0.190", features = ["derive"] }
+serde = { version = "1.0.192", features = ["derive"] }
 serde_json = "1.0.108"
 # Todo remove this and use a proper error for the library
 anyhow = "1.0.75"
