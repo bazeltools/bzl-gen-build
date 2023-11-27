@@ -15,7 +15,7 @@ futures = "0.3.29"
 sha2 = { version = "0.10.8", features = ["asm"] }
 thiserror = "1.0.50"
 lazy_static = "1.4.0"
-ignore = "0.4.18"
+ignore = "0.4.21"
 rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7"}
 rustpython-ast = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7", features = ["unparse"]}
 pretty_env_logger = "0.5.0"
