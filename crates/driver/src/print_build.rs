@@ -164,7 +164,13 @@ impl TargetEntries {
 
     pub fn emit_build_file(&self) -> Result<String> {
         let program = self.to_ast()?;
-        Ok(format!("{}", &program))
+        Ok(format!(
+            "# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+{}
+# ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+",
+            &program
+        ))
     }
 
     pub fn to_ast(&self) -> Result<PythonProgram> {
@@ -1068,9 +1074,11 @@ py_proto_library(
             PythonProgram::parse(format!("{}", parsed).as_str(), "tmp.py").unwrap()
         };
         assert_eq!(
-            expected_parsed, actual_parsed,
+            expected_parsed.to_string(),
+            actual_parsed.to_string(),
             "\n\nexpected:\n{}\n\nactual:\n{}\n",
-            expected_parsed, actual_parsed
+            expected_parsed,
+            actual_parsed
         );
         Ok(())
     }
@@ -1131,9 +1139,11 @@ scala_tests(
             PythonProgram::parse(generated_s.as_str(), "tmp.py").unwrap();
 
         assert_eq!(
-            parsed_from_embed_string, parsed_from_generated_string,
+            parsed_from_embed_string.to_string(),
+            parsed_from_generated_string.to_string(),
             "\n\nExpected:\n{}\n\nGenerated:\n{}\n",
-            parsed_from_embed_string, parsed_from_generated_string
+            parsed_from_embed_string,
+            parsed_from_generated_string
         );
     }
 }
