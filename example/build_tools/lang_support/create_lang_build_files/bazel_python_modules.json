@@ -7,18 +7,22 @@
         "build_config": {
           "main": {
             "headers": [],
-            "function_name": "py_library"
+            "function_name": "py_library",
+            "include_file_extension": false
           },
           "test": {
             "headers": [],
-            "function_name": "py_test"
+            "function_name": "py_test",
+            "include_file_extension": false
           }
         },
         "main_roots": [
+          "com",
           "src/main/python"
         ],
         "test_roots": [
-          "src/test/python"
+          "src/test/python",
+          "tests"
         ],
         "path_directives": []
       }

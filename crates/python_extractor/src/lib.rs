@@ -220,6 +220,9 @@ fn expand_path_to_defs(path: &str) -> Vec<String> {
         if element == "src" {
             results.push("src".to_string());
         }
+        if element == "com" {
+            results.push("com".to_string());
+        }
     }
 
     let mut results: Vec<String> = results

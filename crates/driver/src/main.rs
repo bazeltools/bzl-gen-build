@@ -91,6 +91,9 @@ pub struct Opt {
     #[clap(long)]
     no_aggregate_source: bool,
 
+    #[clap(long)]
+    append: bool,
+
     #[command(subcommand)]
     command: Commands,
 }

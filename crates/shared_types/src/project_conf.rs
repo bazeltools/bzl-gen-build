@@ -120,7 +120,8 @@ mod tests {
             "build_config": {
               "main": {
                 "headers": [],
-                "function_name": "java_library"
+                "function_name": "java_library",
+                "include_file_extension": false
               },
               "extra_key_to_list": {
                 "plugins": [
@@ -162,6 +163,7 @@ mod tests {
                             main: Some(GrpBuildConfig {
                                 headers: vec![],
                                 function_name: "java_library".to_string(),
+                                include_file_extension: false,
                                 extra_key_to_list: HashMap::default(),
                                 extra_key_to_value: HashMap::default()
                             }),

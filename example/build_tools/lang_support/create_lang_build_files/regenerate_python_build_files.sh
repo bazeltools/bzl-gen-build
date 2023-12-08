@@ -32,4 +32,6 @@ bazel query '@pip//...' | grep '@pip' > $TMP_WORKING_STATE/external_targets
     # update_remote_cache "remote_python_${CACHE_KEY}"
 # fi
 
-run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json"
+run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json" \
+  --no-aggregate-source \
+  --append

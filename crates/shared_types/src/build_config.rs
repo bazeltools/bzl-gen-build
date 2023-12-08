@@ -47,4 +47,10 @@ pub struct GrpBuildConfig {
     pub extra_key_to_list: HashMap<String, Vec<String>>,
     #[serde(default, serialize_with = "crate::serde_helpers::ordered_map")]
     pub extra_key_to_value: HashMap<String, String>,
+    #[serde(default = "default_as_true")]
+    pub include_file_extension: bool,
+}
+
+fn default_as_true() -> bool {
+    true
 }

@@ -146,9 +146,14 @@ function run_system_apps() {
     GLOBAL_FLAG=
     if (( $# > 0 )); then
         if [[ "$1" == "--no-aggregate-source" ]]; then
-            GLOBAL_FLAG="--no-aggregate-source";
+            GLOBAL_FLAG="$GLOBAL_FLAG --no-aggregate-source";
+            shift
         fi
-        shift
+
+        if [[ "$1" == "--append" ]]; then
+            GLOBAL_FLAG="$GLOBAL_FLAG --append";
+            shift
+        fi
     fi
 
     set -ex

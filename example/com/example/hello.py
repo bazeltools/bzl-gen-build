@@ -1,5 +1,7 @@
 import pandas as pd
 
+FOO = [""]
+
 def some_data():
     return pd.DataFrame()
 

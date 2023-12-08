@@ -4,7 +4,7 @@ package com.example.foo;
 
 option java_multiple_files = true;
 
-import "src/main/protos/com/example/aa.proto";
+import "com/example/aa.proto";
 
 message B {
   A a = 1;
