@@ -170,7 +170,7 @@ pub async fn extract_python(
         if let Some(rel) = import_path_relative_from.as_ref() {
             defs.extend(expand_path_to_defs_from_offset(rel, file_p.as_ref()));
         } else {
-            defs.extend(expand_path_to_defs(file_p.as_ref()));
+            defs.extend(expand_path_to_defs(&relative_path, file_p.as_ref()));
         }
         data_blocks.push(DataBlock {
             entity_path: relative_path,
@@ -209,19 +209,17 @@ fn expand_path_to_defs_from_offset(from_given_path: &str, path: &str) -> Vec<Str
     Vec::default()
 }
 
-fn expand_path_to_defs(path: &str) -> Vec<String> {
+fn expand_path_to_defs(relative_path: &str, path: &str) -> Vec<String> {
     let mut results = Vec::default();
+    let relative_elements: Vec<&str> = relative_path.split('/').collect();
     for element in path.split('/') {
         results = results
             .into_iter()
             .map(|r| format!("{}.{}", r, element))
             .collect();
 
-        if element == "src" {
-            results.push("src".to_string());
-        }
-        if element == "com" {
-            results.push("com".to_string());
+        if element == relative_elements[0] {
+            results.push(element.to_string());
         }
     }
 
@@ -245,7 +243,18 @@ mod tests {
         expected.sort();
 
         assert_eq!(
-            expand_path_to_defs("/Users/foo/bar/src/main/python/blah/ppp.py"),
+            expand_path_to_defs("src/main/python/blah/ppp.py", "/Users/foo/bar/src/main/python/blah/ppp.py"),
+            expected
+        );
+    }
+
+    #[test]
+    fn expand_com_path_to_defs_test() {
+        let mut expected = vec!["com.blah.ppp"];
+        expected.sort();
+
+        assert_eq!(
+            expand_path_to_defs("com/blah/ppp.py", "/Users/foo/bar/com/blah/ppp.py"),
             expected
         );
     }
@@ -256,7 +265,7 @@ mod tests {
         expected.sort();
 
         assert_eq!(
-            expand_path_to_defs("/Users/foo/bar/src/main/python/blah/src/main/ppp.py"),
+            expand_path_to_defs("src/main/python/blah/src/main/ppp.py", "/Users/foo/bar/src/main/python/blah/src/main/ppp.py"),
             expected
         );
     }
