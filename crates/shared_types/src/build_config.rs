@@ -64,3 +64,23 @@ pub struct GrpBuildConfig {
 pub fn default_auto() -> TargetNameStrategy {
     TargetNameStrategy::Auto
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum WriteMode {
+    /// automatic default
+    #[default]
+    Overwrite,
+    /// use the file stem (file name without the extension) of the source code
+    Append,
+}
+
+impl WriteMode {
+    pub fn new(append: bool) -> WriteMode {
+        if append {
+            WriteMode::Append
+        } else {
+            WriteMode::Overwrite
+        }
+    }
+}
