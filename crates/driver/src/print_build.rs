@@ -12,7 +12,7 @@ use crate::{
 use anyhow::{anyhow, Context, Result};
 use ast::{Located, StmtKind};
 use bzl_gen_build_python_utilities::{ast_builder, PythonProgram};
-use bzl_gen_build_shared_types::{module_config::ModuleConfig, *};
+use bzl_gen_build_shared_types::{module_config::ModuleConfig, build_config::TargetNameStrategy, *};
 use futures::{stream, StreamExt};
 use ignore::WalkBuilder;
 use rustpython_parser::ast;
@@ -275,11 +275,11 @@ where
             ));
         };
 
-        let include_file_extension = build_config.include_file_extension;
+        let target_name_strategy = build_config.target_name_strategy;
         let target_name = if !opt.no_aggregate_source {
             base_name.clone()
         } else {
-            to_name_from_file_name(&node_file_name, include_file_extension)?
+            to_name_from_file_name(&node_file_name, target_name_strategy)?
         }; 
 
         fn add_non_empty(
@@ -287,22 +287,23 @@ where
             key: &str,
             labels: &Vec<String>,
             extra_kv_pairs: &mut HashMap<String, Vec<String>>,
-            include_file_extension: bool,
-        ) {
+            target_name_strategy: TargetNameStrategy,
+        ) -> Result<()> {
             if !labels.is_empty() {
-                let vals = labels.iter().map(|e| to_label(&opt, e, include_file_extension)).collect();
+                let vals = labels.iter().map(|e| to_label(&opt, e, target_name_strategy)).collect();
                 extra_kv_pairs.insert(key.to_string(), vals);
             }
+            Ok(())
         }
 
-        add_non_empty(opt, "deps", &graph_node.dependencies, &mut extra_kv_pairs, include_file_extension);
+        add_non_empty(opt, "deps", &graph_node.dependencies, &mut extra_kv_pairs, target_name_strategy)?;
         add_non_empty(
             opt,
             "runtime_deps",
             &graph_node.runtime_dependencies,
             &mut extra_kv_pairs,
-            include_file_extension,
-        );
+            target_name_strategy,
+        )?;
 
         for (k, lst) in build_config.extra_key_to_list.iter() {
             append_key_values(&mut extra_kv_pairs, &k, &lst);
@@ -504,7 +505,7 @@ where
         );
     } // end for graph_nodes
 
-    fn to_label(opt: &'static Opt, entry: &String, include_file_extension: bool) -> String {
+    fn to_label(opt: &'static Opt, entry: &String, target_name_strategy: TargetNameStrategy) -> String {
         if entry.starts_with('@') {
             entry.clone()
         } else {
@@ -513,20 +514,23 @@ where
             } else {
                 let directory = to_directory(entry.to_string());
                 let full_file = opt.working_directory.join(&entry);
-                let name = to_name_from_file_name(&to_file_name(&full_file), include_file_extension).unwrap();
+                let file_name = to_file_name(&full_file);
+                // Result<String> fails only if the file_name fails to get a file stem, so it's not likely
+                let name = to_name_from_file_name(&file_name, target_name_strategy).unwrap_or(file_name);
                 format!("//{}:{}", directory, name)
             }
         }
     }
 
-    fn to_name_from_file_name(file_name: &String, include_file_extension: bool) -> Result<String> {
-        if include_file_extension {
-            Ok(file_name.replace(".", "_"))
-        } else {
-            match Path::new(&file_name).file_stem() {
-                Some(s) => Ok(s.to_str().unwrap().to_string()),
-                None => Err(anyhow!("can't get file_stem of {}", file_name))
-            }
+    fn to_name_from_file_name(file_name: &String, target_name_strategy: TargetNameStrategy) -> Result<String> {
+        match target_name_strategy {
+            TargetNameStrategy::SourceFileStem => {
+                match Path::new(&file_name).file_stem() {
+                    Some(s) => Ok(s.to_string_lossy().to_string()),
+                    None => Err(anyhow!("can't get file_stem of {}", file_name))
+                }
+            },
+            TargetNameStrategy::Auto => Ok(file_name.replace(".", "_"))
         }
     }
 
@@ -912,7 +916,7 @@ mod tests {
                                 load_value: "proto_library".to_string(),
                             }],
                             function_name: "proto_library".to_string(),
-                            include_file_extension: true,
+                            target_name_strategy: TargetNameStrategy::SourceFileStem,
                             extra_key_to_list: HashMap::default(),
                             extra_key_to_value: HashMap::default(),
                         }),
@@ -942,7 +946,7 @@ mod tests {
                                 load_value: "proto_library".to_string(),
                             }],
                             function_name: "proto_library".to_string(),
-                            include_file_extension: true,
+                            target_name_strategy: TargetNameStrategy::Auto,
                             extra_key_to_list: HashMap::default(),
                             extra_key_to_value: HashMap::default(),
                         }),
@@ -954,7 +958,7 @@ mod tests {
                                 GrpBuildConfig {
                                     headers: vec![],
                                     function_name: "java_proto_library".to_string(),
-                                    include_file_extension: true,
+                                    target_name_strategy: TargetNameStrategy::Auto,
                                     extra_key_to_list: HashMap::from([(
                                         "deps".to_string(),
                                         vec![":${name}".to_string()],
@@ -971,7 +975,7 @@ mod tests {
                                         load_value: "py_proto_library".to_string(),
                                     }],
                                     function_name: "py_proto_library".to_string(),
-                                    include_file_extension: true,
+                                    target_name_strategy: TargetNameStrategy::Auto,
                                     extra_key_to_list: HashMap::from([
                                         ("srcs".to_string(), vec!["${srcs}".to_string()]),
                                         ("deps".to_string(), vec!["${deps}_py".to_string()]),

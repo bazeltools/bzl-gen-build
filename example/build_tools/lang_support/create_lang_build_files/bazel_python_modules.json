@@ -8,12 +8,12 @@
           "main": {
             "headers": [],
             "function_name": "py_library",
-            "include_file_extension": false
+            "target_name_strategy": "source_file_stem"
           },
           "test": {
             "headers": [],
             "function_name": "py_test",
-            "include_file_extension": false
+            "target_name_strategy": "source_file_stem"
           }
         },
         "main_roots": [

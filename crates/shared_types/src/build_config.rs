@@ -39,6 +39,16 @@ pub struct BuildLoad {
     pub load_value: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetNameStrategy {
+    /// automatic default
+    #[default]
+    Auto,
+    /// use the file stem (file name without the extension) of the source code
+    SourceFileStem,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct GrpBuildConfig {
     pub headers: Vec<BuildLoad>,
@@ -47,10 +57,10 @@ pub struct GrpBuildConfig {
     pub extra_key_to_list: HashMap<String, Vec<String>>,
     #[serde(default, serialize_with = "crate::serde_helpers::ordered_map")]
     pub extra_key_to_value: HashMap<String, String>,
-    #[serde(default = "default_as_true")]
-    pub include_file_extension: bool,
+    #[serde(default = "default_auto")]
+    pub target_name_strategy: TargetNameStrategy,
 }
 
-fn default_as_true() -> bool {
-    true
+pub fn default_auto() -> TargetNameStrategy {
+    TargetNameStrategy::Auto
 }

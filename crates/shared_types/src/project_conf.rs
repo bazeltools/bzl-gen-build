@@ -105,7 +105,7 @@ mod tests {
     use std::collections::{BTreeMap, HashMap};
 
     use crate::{
-        build_config::{BuildConfig, GrpBuildConfig},
+        build_config::{BuildConfig, GrpBuildConfig, TargetNameStrategy},
         module_config::ModuleConfig,
         DirectiveConf, ProjectConf,
     };
@@ -121,7 +121,7 @@ mod tests {
               "main": {
                 "headers": [],
                 "function_name": "java_library",
-                "include_file_extension": false
+                "target_name_strategy": "source_file_stem"
               },
               "extra_key_to_list": {
                 "plugins": [
@@ -163,7 +163,7 @@ mod tests {
                             main: Some(GrpBuildConfig {
                                 headers: vec![],
                                 function_name: "java_library".to_string(),
-                                include_file_extension: false,
+                                target_name_strategy: TargetNameStrategy::SourceFileStem,
                                 extra_key_to_list: HashMap::default(),
                                 extra_key_to_value: HashMap::default()
                             }),
