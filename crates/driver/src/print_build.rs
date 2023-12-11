@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -12,13 +12,17 @@ use crate::{
 use anyhow::{anyhow, Context, Result};
 use ast::{Located, StmtKind};
 use bzl_gen_build_python_utilities::{ast_builder, PythonProgram};
-use bzl_gen_build_shared_types::{module_config::ModuleConfig, *};
+use bzl_gen_build_shared_types::{
+    build_config::{TargetNameStrategy, WriteMode},
+    module_config::ModuleConfig,
+    *,
+};
 use futures::{stream, StreamExt};
 use ignore::WalkBuilder;
 use rustpython_parser::ast;
 
 use futures::Future;
-use tokio::sync::Semaphore;
+use tokio::{io::AsyncWriteExt, sync::Semaphore};
 
 lazy_static::lazy_static! {
     static ref BUILD_BAZEL: std::ffi::OsString = std::ffi::OsString::from("BUILD.bazel");
@@ -259,33 +263,7 @@ where
     for graph_node in graph_nodes {
         let node_file = opt.working_directory.join(&graph_node.node_label);
         let node_file_name = to_file_name(&node_file);
-        let target_name = if !opt.no_aggregate_source {
-            base_name.clone()
-        } else {
-            node_file_name.replace(".", "_")
-        };
         let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
-
-        fn add_non_empty(
-            opt: &'static Opt,
-            key: &str,
-            labels: &Vec<String>,
-            extra_kv_pairs: &mut HashMap<String, Vec<String>>,
-        ) {
-            if !labels.is_empty() {
-                let vals = labels.iter().map(|e| to_label(&opt, e)).collect();
-                extra_kv_pairs.insert(key.to_string(), vals);
-            }
-        }
-
-        add_non_empty(opt, "deps", &graph_node.dependencies, &mut extra_kv_pairs);
-        add_non_empty(
-            opt,
-            "runtime_deps",
-            &graph_node.runtime_dependencies,
-            &mut extra_kv_pairs,
-        );
-
         let (build_config, use_rglob) = if path_type == "test" {
             (&module_config.build_config.test, true)
         } else {
@@ -300,6 +278,44 @@ where
                 graph_node
             ));
         };
+
+        let target_name_strategy = build_config.target_name_strategy;
+        let target_name = if !opt.no_aggregate_source {
+            base_name.clone()
+        } else {
+            to_name_from_file_name(&node_file_name, target_name_strategy)?
+        };
+
+        fn add_non_empty(
+            opt: &'static Opt,
+            key: &str,
+            labels: &Vec<String>,
+            extra_kv_pairs: &mut HashMap<String, Vec<String>>,
+            target_name_strategy: TargetNameStrategy,
+        ) {
+            if !labels.is_empty() {
+                let vals = labels
+                    .iter()
+                    .map(|e| to_label(&opt, e, target_name_strategy))
+                    .collect();
+                extra_kv_pairs.insert(key.to_string(), vals);
+            }
+        }
+
+        add_non_empty(
+            opt,
+            "deps",
+            &graph_node.dependencies,
+            &mut extra_kv_pairs,
+            target_name_strategy,
+        );
+        add_non_empty(
+            opt,
+            "runtime_deps",
+            &graph_node.runtime_dependencies,
+            &mut extra_kv_pairs,
+            target_name_strategy,
+        );
 
         for (k, lst) in build_config.extra_key_to_list.iter() {
             append_key_values(&mut extra_kv_pairs, &k, &lst);
@@ -501,7 +517,11 @@ where
         );
     } // end for graph_nodes
 
-    fn to_label(opt: &'static Opt, entry: &String) -> String {
+    fn to_label(
+        opt: &'static Opt,
+        entry: &String,
+        target_name_strategy: TargetNameStrategy,
+    ) -> String {
         if entry.starts_with('@') {
             entry.clone()
         } else {
@@ -510,9 +530,25 @@ where
             } else {
                 let directory = to_directory(entry.to_string());
                 let full_file = opt.working_directory.join(&entry);
-                let name = to_file_name(&full_file).replace(".", "_");
+                let file_name = to_file_name(&full_file);
+                // Result<String> fails only if the file_name fails to get a file stem, so it's not likely
+                let name =
+                    to_name_from_file_name(&file_name, target_name_strategy).unwrap_or(file_name);
                 format!("//{}:{}", directory, name)
             }
+        }
+    }
+
+    fn to_name_from_file_name(
+        file_name: &String,
+        target_name_strategy: TargetNameStrategy,
+    ) -> Result<String> {
+        match target_name_strategy {
+            TargetNameStrategy::SourceFileStem => match Path::new(&file_name).file_stem() {
+                Some(s) => Ok(s.to_string_lossy().to_string()),
+                None => Err(anyhow!("can't get file_stem of {}", file_name)),
+            },
+            TargetNameStrategy::Auto => Ok(file_name.replace(".", "_")),
         }
     }
 
@@ -743,9 +779,31 @@ async fn print_file(
     )
     .await?;
     let handle = concurrent_io_operations.acquire().await?;
-    tokio::fs::write(&target_file, t.emit_build_file()?)
-        .await
-        .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
+    let write_mode = WriteMode::new(opt.append);
+    match write_mode {
+        WriteMode::Append => {
+            let mut file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(&target_file)
+                .await?;
+            file.write(t.emit_build_file()?.as_bytes())
+                .await
+                .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
+        }
+        WriteMode::Overwrite => {
+            let mut file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&target_file)
+                .await?;
+            file.write_all(t.emit_build_file()?.as_bytes())
+                .await
+                .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
+        }
+    }
     drop(handle);
 
     Ok(emitted_files)
@@ -837,9 +895,12 @@ pub async fn print_build(
     }
 
     // These files are old and not updated..
-    for f in current_files {
-        println!("Deleting no longer used build file of: {:?}", f);
-        std::fs::remove_file(&f)?;
+    let write_mode = WriteMode::new(opt.append);
+    if write_mode == WriteMode::Overwrite {
+        for f in current_files {
+            println!("Deleting no longer used build file of: {:?}", f);
+            std::fs::remove_file(&f)?;
+        }
     }
 
     Ok(())
@@ -853,13 +914,14 @@ mod tests {
     use crate::Commands::PrintBuild;
     use std::collections::BTreeMap;
 
-    fn example_opt(no_aggregate_source: bool) -> Opt {
+    fn example_opt(no_aggregate_source: bool, write_mode: WriteMode) -> Opt {
         Opt {
             input_path: PathBuf::new(),
             working_directory: PathBuf::new(),
             concurrent_io_operations: 8,
             cache_path: PathBuf::new(),
             no_aggregate_source: no_aggregate_source,
+            append: write_mode == WriteMode::Append,
             command: PrintBuild(PrintBuildArgs {
                 graph_data: PathBuf::new(),
             }),
@@ -879,6 +941,7 @@ mod tests {
                                 load_value: "proto_library".to_string(),
                             }],
                             function_name: "proto_library".to_string(),
+                            target_name_strategy: TargetNameStrategy::SourceFileStem,
                             extra_key_to_list: HashMap::default(),
                             extra_key_to_value: HashMap::default(),
                         }),
@@ -908,6 +971,7 @@ mod tests {
                                 load_value: "proto_library".to_string(),
                             }],
                             function_name: "proto_library".to_string(),
+                            target_name_strategy: TargetNameStrategy::Auto,
                             extra_key_to_list: HashMap::default(),
                             extra_key_to_value: HashMap::default(),
                         }),
@@ -919,6 +983,7 @@ mod tests {
                                 GrpBuildConfig {
                                     headers: vec![],
                                     function_name: "java_proto_library".to_string(),
+                                    target_name_strategy: TargetNameStrategy::Auto,
                                     extra_key_to_list: HashMap::from([(
                                         "deps".to_string(),
                                         vec![":${name}".to_string()],
@@ -935,6 +1000,7 @@ mod tests {
                                         load_value: "py_proto_library".to_string(),
                                     }],
                                     function_name: "py_proto_library".to_string(),
+                                    target_name_strategy: TargetNameStrategy::Auto,
                                     extra_key_to_list: HashMap::from([
                                         ("srcs".to_string(), vec!["${srcs}".to_string()]),
                                         ("deps".to_string(), vec!["${deps}_py".to_string()]),
@@ -978,6 +1044,7 @@ proto_library(
 )
         "#,
             false,
+            WriteMode::Overwrite,
         )
         .await
     }
@@ -1042,6 +1109,7 @@ py_proto_library(
 )
         "#,
             true,
+            WriteMode::Overwrite,
         )
         .await
     }
@@ -1053,9 +1121,10 @@ py_proto_library(
         expected_target_count: usize,
         expected_build_file: &str,
         no_aggregate_source: bool,
+        write_mode: WriteMode,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut emitted_files: Vec<PathBuf> = Vec::default();
-        let opt = Box::leak(Box::new(example_opt(no_aggregate_source)));
+        let opt = Box::leak(Box::new(example_opt(no_aggregate_source, write_mode)));
         let boxed_project_conf = Box::leak(Box::new(project_conf));
         let target_entries = generate_targets(
             opt,

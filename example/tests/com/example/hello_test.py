@@ -1,6 +1,6 @@
 import unittest
 
-from src.main.python.com.example.hello.hello import some_data
+from com.example.hello import some_data
 
 class HelloTest(unittest.TestCase):
     def test_empty(self):

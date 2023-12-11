@@ -10,11 +10,5 @@ else
     REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd ../../../ && pwd )"
 fi
 
-GEN_FLAVOR=protos
-source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/bzl_gen_build_common.sh"
-
-log "generate core build files ($GEN_FLAVOR)"
-
-run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json" \
-  --no-aggregate-source \
-  --append
+find "$REPO_ROOT/com" -type f -name "*.bazel" -exec rm -f {} \;
+find "$REPO_ROOT/tests" -type f -name "*.bazel" -exec rm -f {} \;

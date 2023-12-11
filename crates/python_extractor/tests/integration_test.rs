@@ -35,7 +35,7 @@ async fn process_well_formatted_python_module() {
             "data_blocks": [
                 {
                     "entity_path": "test_module.py",
-                    "defs": [],
+                    "defs": ["test_module"],
                     "refs": [
                         "binascii",
                         "html",
@@ -101,7 +101,7 @@ async fn process_non_utf8_python_module() {
             "data_blocks": [
                 {
                     "entity_path": "nonascii.py",
-                    "defs": [],
+                    "defs": ["nonascii"],
                     "refs": [],
                     "bzl_gen_build_commands": []
                 }

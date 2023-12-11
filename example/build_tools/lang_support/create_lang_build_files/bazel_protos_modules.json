@@ -37,10 +37,12 @@
           }
         },
         "main_roots": [
+          "com",
           "src/main/protos"
         ],
         "test_roots": [
-          "src/test/protos"
+          "src/test/protos",
+          "tests"
         ],
         "path_directives": []
       }

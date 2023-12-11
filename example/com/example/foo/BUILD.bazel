@@ -1,10 +1,10 @@
 # ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 load('@rules_proto//proto:defs.bzl', 'proto_library')
 load('@rules_python//python:proto.bzl', 'py_proto_library')
-proto_library(name='bb_proto', srcs=['bb.proto'], deps=['//src/main/protos/com/example:aa_proto'], visibility=['//visibility:public'])
+proto_library(name='bb_proto', srcs=['bb.proto'], deps=['//com/example:aa_proto'], visibility=['//visibility:public'])
 java_proto_library(name='bb_proto_java', deps=[':bb_proto'], visibility=['//visibility:public'])
 py_proto_library(name='bb_proto_py', deps=[':bb_proto'], visibility=['//visibility:public'])
-proto_library(name='cc_proto', srcs=['cc.proto'], deps=['//src/main/protos/com/example:aa_proto'], visibility=['//visibility:public'])
+proto_library(name='cc_proto', srcs=['cc.proto'], deps=['//com/example:aa_proto'], visibility=['//visibility:public'])
 java_proto_library(name='cc_proto_java', deps=[':cc_proto'], visibility=['//visibility:public'])
 py_proto_library(name='cc_proto_py', deps=[':cc_proto'], visibility=['//visibility:public'])
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
