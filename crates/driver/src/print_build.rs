@@ -292,7 +292,7 @@ where
             labels: &Vec<String>,
             extra_kv_pairs: &mut HashMap<String, Vec<String>>,
             target_name_strategy: TargetNameStrategy,
-        ) -> Result<()> {
+        ) {
             if !labels.is_empty() {
                 let vals = labels
                     .iter()
@@ -300,7 +300,6 @@ where
                     .collect();
                 extra_kv_pairs.insert(key.to_string(), vals);
             }
-            Ok(())
         }
 
         add_non_empty(
@@ -309,14 +308,14 @@ where
             &graph_node.dependencies,
             &mut extra_kv_pairs,
             target_name_strategy,
-        )?;
+        );
         add_non_empty(
             opt,
             "runtime_deps",
             &graph_node.runtime_dependencies,
             &mut extra_kv_pairs,
             target_name_strategy,
-        )?;
+        );
 
         for (k, lst) in build_config.extra_key_to_list.iter() {
             append_key_values(&mut extra_kv_pairs, &k, &lst);
