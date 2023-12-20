@@ -3,8 +3,16 @@
 set -euo pipefail
 
 set +x
-BZL_GEN_BUILD_VERSION=v0.1-81
+BZL_GEN_BUILD_VERSION=v0.1-96
 BZL_GEN_BUILD_SOURCE_GITHUB_REPO=bazeltools/bzl-gen-build
+
+if [ -n "${INVOKED_VIA_BAZEL:-}" ]; then
+    REPO_ROOT="$BUILD_WORKING_DIRECTORY"
+else
+    REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd ../../../ && pwd )"
+fi
+
+source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/fetch_binary.sh"
 
 function log(){
     DTE="$(date '+%Y %m %d %H:%M:%S')"
