@@ -12,10 +12,11 @@ use crate::{
 };
 use anyhow::{anyhow, Context, Result};
 use bzl_gen_build_shared_types::{
-    api::extracted_data::ExtractedData, internal_types::tree_node::TreeNode,
-    module_config::ModuleConfig, Directive, ProjectConf,
+    api::extracted_data::ExtractedData, build_config::SourceConfig,
+    internal_types::tree_node::TreeNode, module_config::ModuleConfig, Directive, ProjectConf,
 };
-use ignore::WalkBuilder;
+use globset::{Glob, GlobSet, GlobSetBuilder};
+use ignore::{DirEntry, WalkBuilder};
 use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
@@ -141,43 +142,75 @@ async fn process_file(
     }
 }
 
+// check that a file entry is a match
+fn has_good_extension(entry: &DirEntry, file_extensions: &Vec<OsString>) -> bool {
+    if entry.file_type().map(|e| e.is_file()).unwrap_or(false) {
+        let extension = entry.path().extension();
+        if let Some(ext) = extension {
+            let ext_match = file_extensions.iter().any(|e| e == ext);
+            ext_match
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+pub fn to_globset(test_globs: &Vec<String>) -> Result<GlobSet> {
+    if test_globs.is_empty() {
+        let globset_builder = &mut GlobSetBuilder::new();
+        Ok(globset_builder.add(Glob::new("**/*.*")?).build()?)
+    } else {
+        let globset_builder = &mut GlobSetBuilder::new();
+        Ok(test_globs
+            .into_iter()
+            .fold(
+                Ok(globset_builder),
+                |builder: Result<&mut GlobSetBuilder, globset::Error>, glob| {
+                    builder.and_then(|b| Ok(b.add(Glob::new(glob.as_str())?)))
+                },
+            )?
+            .build()?)
+    }
+}
+
 async fn async_extract_def_refs(
     working_directory: &'static PathBuf,
     child_path: String,
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
+    source_config: SourceConfig,
 ) -> Result<((PathBuf, Duration), Vec<ProcessedFile>)> {
     let mut results: Vec<
         tokio::task::JoinHandle<Result<(ProcessedFile, Duration), anyhow::Error>>,
     > = Vec::default();
+    let is_empty_globs = opt.module_config.test_globs.is_empty();
+    let globset = to_globset(&opt.module_config.test_globs)?;
     for entry in WalkBuilder::new(working_directory.join(child_path))
         .build()
         .into_iter()
         .filter_map(|e| e.ok())
+        .filter(|e| has_good_extension(e, &opt.file_extensions))
+        .filter(|e| {
+            is_empty_globs || globset.is_match(e.path()) ^ (source_config == SourceConfig::Main)
+        })
     {
-        if entry.file_type().map(|e| e.is_file()).unwrap_or(false) {
-            let extension = entry.path().extension();
-            if let Some(ext) = extension {
-                if opt.file_extensions.iter().any(|e| e.as_os_str() == ext) {
-                    let opt = opt.clone();
-
-                    let e = entry
-                        .path()
-                        .strip_prefix(working_directory.as_path())?
-                        .to_path_buf();
-                    results.push(tokio::spawn(async move {
-                        process_file(
-                            e,
-                            working_directory,
-                            entry.into_path(),
-                            concurrent_io_operations,
-                            opt,
-                        )
-                        .await
-                    }));
-                }
-            }
-        }
+        let opt = opt.clone();
+        let e = entry
+            .path()
+            .strip_prefix(working_directory.as_path())?
+            .to_path_buf();
+        results.push(tokio::spawn(async move {
+            process_file(
+                e,
+                working_directory,
+                entry.into_path(),
+                concurrent_io_operations,
+                opt,
+            )
+            .await
+        }));
     }
     let mut max_duration = Duration::ZERO;
     let mut max_target = PathBuf::from("");
@@ -381,21 +414,26 @@ async fn run_extractors_on_data<'a>(
 ) -> Result<(Vec<Vec<ProcessedFile>>, (PathBuf, Duration))> {
     let cfgs = extract_configs(opt, project_conf, sha_to_extract_root, extractors)?;
 
-    let mut all_visiting_paths: Vec<(String, Arc<ExtractConfig>)> = Vec::default();
+    let mut all_visiting_paths: Vec<(String, Arc<ExtractConfig>, SourceConfig)> = Vec::default();
     for cfg in cfgs {
         all_visiting_paths.extend(
             cfg.module_config
                 .main_roots
                 .iter()
-                .chain(cfg.module_config.test_roots.iter())
-                .map(|e| (e.clone(), cfg.clone())),
+                .map(|e| (e.clone(), cfg.clone(), SourceConfig::Main)),
+        );
+        all_visiting_paths.extend(
+            cfg.module_config
+                .test_roots
+                .iter()
+                .map(|e| (e.clone(), cfg.clone(), SourceConfig::Test)),
         );
     }
 
     let mut async_join_handle: Vec<
         tokio::task::JoinHandle<Result<((PathBuf, Duration), Vec<ProcessedFile>)>>,
     > = Vec::default();
-    for (path, extract_config) in all_visiting_paths.into_iter() {
+    for (path, extract_config, source_config) in all_visiting_paths.into_iter() {
         let extract_config = extract_config.clone();
         async_join_handle.push(tokio::spawn(async move {
             let r = async_extract_def_refs(
@@ -403,6 +441,7 @@ async fn run_extractors_on_data<'a>(
                 path,
                 concurrent_io_operations,
                 extract_config,
+                source_config,
             )
             .await?;
             Ok(r)
@@ -579,4 +618,72 @@ pub async fn extract_defrefs(
 
     write_json_file(extract.extracted_mappings.as_path(), &extracted_mappings)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    async fn walk_directories<A, F, R>(
+        working_directory: &PathBuf,
+        child_path: String,
+        file_extensions: &Vec<OsString>,
+        test_globs: &Vec<String>,
+        source_config: SourceConfig,
+        on_entry: F,
+    ) -> Result<Vec<A>>
+    where
+        F: Fn(DirEntry, PathBuf) -> R,
+        R: futures::Future<Output = Result<A>> + Send + 'static,
+    {
+        let mut results: Vec<A> = Vec::default();
+        let globset = to_globset(test_globs)?;
+        let is_empty_globs = test_globs.is_empty();
+        for entry in WalkBuilder::new(working_directory.join(child_path))
+            .build()
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| has_good_extension(e, file_extensions))
+            .filter(|e| {
+                is_empty_globs || globset.is_match(e.path()) ^ (source_config == SourceConfig::Main)
+            })
+        {
+            let relative_path = entry
+                .path()
+                .strip_prefix(working_directory.as_path())?
+                .to_path_buf();
+            results.append(&mut vec![on_entry(entry, relative_path).await?]);
+        }
+        Ok(results)
+    }
+
+    #[tokio::test]
+    async fn test_walk_directories_in_com() -> Result<(), Box<dyn std::error::Error>> {
+        let working_directory = fs::canonicalize(PathBuf::from("../../example"))?;
+        let child_path = "com".to_string();
+        let py_exts = vec![std::ffi::OsString::from("py")];
+        let test_globs = vec!["**/test*.py".to_string(), "**/*test.py".to_string()];
+        let result0 = walk_directories(
+            &working_directory,
+            child_path.clone(),
+            &py_exts,
+            &test_globs,
+            SourceConfig::Main,
+            |_entry, relative_path| async move { Ok(relative_path) },
+        )
+        .await?;
+        assert_eq!(result0, vec![PathBuf::from("com/example/hello.py")]);
+        let result2 = walk_directories(
+            &working_directory,
+            child_path.clone(),
+            &py_exts,
+            &test_globs,
+            SourceConfig::Test,
+            |_entry, relative_path| async move { Ok(relative_path) },
+        )
+        .await?;
+        assert_eq!(result2, vec![PathBuf::from("com/example/hello_test.py")]);
+        Ok(())
+    }
 }

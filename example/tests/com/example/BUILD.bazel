@@ -1,3 +1,0 @@
-# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
-py_test(name='hello_test', srcs=glob(include=['**/*.py']), deps=['//com/example:hello'], visibility=['//visibility:public'])
-# ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
