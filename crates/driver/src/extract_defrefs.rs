@@ -156,11 +156,10 @@ fn has_good_extension(entry: &DirEntry, file_extensions: &Vec<OsString>) -> bool
 }
 
 pub fn to_globset(test_globs: &Vec<String>) -> Result<GlobSet> {
+    let globset_builder = &mut GlobSetBuilder::new();
     if test_globs.is_empty() {
-        let globset_builder = &mut GlobSetBuilder::new();
         Ok(globset_builder.add(Glob::new("**/*.*")?).build()?)
     } else {
-        let globset_builder = &mut GlobSetBuilder::new();
         Ok(test_globs
             .into_iter()
             .fold(
