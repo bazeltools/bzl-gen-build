@@ -144,16 +144,14 @@ async fn process_file(
 
 // check that a file entry is a match
 fn has_good_extension(entry: &DirEntry, file_extensions: &Vec<OsString>) -> bool {
-    if entry.file_type().map(|e| e.is_file()).unwrap_or(false) {
-        let extension = entry.path().extension();
-        if let Some(ext) = extension {
+    let entry_is_file = entry.file_type().map(|e| e.is_file()).unwrap_or(false);
+    entry_is_file && {
+        if let Some(ext) = entry.path().extension() {
             let ext_match = file_extensions.iter().any(|e| e == ext);
             ext_match
         } else {
             false
         }
-    } else {
-        false
     }
 }
 
