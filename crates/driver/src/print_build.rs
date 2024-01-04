@@ -211,7 +211,7 @@ async fn generate_targets<F, R>(
     project_conf: &'static ProjectConf,
     source_conf: SourceConfig,
     graph_nodes: Vec<GraphNode>,
-    element: String,
+    element: &String,
     emitted_files: &mut Vec<PathBuf>,
     on_child: F,
 ) -> Result<TargetEntries>
@@ -775,7 +775,7 @@ async fn print_file(
         project_conf,
         SourceConfig::Main,
         graph_nodes.clone(),
-        element.clone(),
+        &element,
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
@@ -791,7 +791,7 @@ async fn print_file(
         project_conf,
         SourceConfig::Test,
         graph_nodes.clone(),
-        element.clone(),
+        &element,
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
@@ -1180,7 +1180,7 @@ py_proto_library(
             boxed_project_conf,
             SourceConfig::Main,
             build_graph,
-            element,
+            &element,
             &mut emitted_files,
             |_sub_target: PathBuf, _t: TargetEntries| async move { Ok(0) },
         )
