@@ -7,7 +7,7 @@ use std::{
 use crate::{
     async_read_json_file,
     build_graph::{GraphMapping, GraphNode, GraphNodeMetadata},
-    extract_defrefs, to_directory, Opt, PrintBuildArgs,
+    extract_defrefs::{self, path_is_match}, to_directory, Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
 use ast::{Located, StmtKind};
@@ -252,15 +252,14 @@ where
     let module_config = if let Some(a) = module_config {
         a
     } else {
-        let t: TargetEntries = Default::default();
-        return Ok(t);
+        return Ok(Default::default());
     };
 
     let target_folder = opt.working_directory.join(&element);
     let base_name = to_file_name(&target_folder);
     let mut t: TargetEntries = Default::default();
-    let is_empty_globs = module_config.test_globs.is_empty();
-    let globset = extract_defrefs::to_globset(&module_config.test_globs)?;
+    let test_globs = &module_config.test_globs;
+    let globset = extract_defrefs::to_globset(test_globs)?;
     for graph_node in graph_nodes {
         let node_file = opt.working_directory.join(&graph_node.node_label);
         let node_file_name = to_file_name(&node_file);
@@ -439,10 +438,7 @@ where
                         };
                         t.entries.push(filegroup_target);
                     } else {
-                        if is_empty_globs
-                            || globset.is_match(&relative_path)
-                                ^ (source_conf == SourceConfig::Main)
-                        {
+                        if path_is_match(&relative_path, test_globs, &globset, &source_conf) {
                             parent_include_src.push(format!("{}", node_file_name));
                         } else {
                             continue; // continue for graph_nodes

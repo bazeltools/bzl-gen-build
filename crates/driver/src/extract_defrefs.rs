@@ -172,6 +172,16 @@ pub fn to_globset(test_globs: &Vec<String>) -> Result<GlobSet> {
     }
 }
 
+pub fn path_is_match(path: &Path, test_globs: &Vec<String>, test_globset: &GlobSet, source_config: &SourceConfig) -> bool {
+    let is_empty_globs = test_globs.is_empty();
+    is_empty_globs || 
+    {
+        // Path is a match if the path matches the test_globset, and it's SourceConfig::Test,
+        // or the patches does NOT match the test_globset, and it's SourceConfig::Main.
+        test_globset.is_match(path) ^ (source_config == &SourceConfig::Main)
+    }
+}
+
 async fn async_extract_def_refs(
     working_directory: &'static PathBuf,
     child_path: String,
@@ -182,16 +192,14 @@ async fn async_extract_def_refs(
     let mut results: Vec<
         tokio::task::JoinHandle<Result<(ProcessedFile, Duration), anyhow::Error>>,
     > = Vec::default();
-    let is_empty_globs = opt.module_config.test_globs.is_empty();
-    let globset = to_globset(&opt.module_config.test_globs)?;
+    let test_globs = &opt.module_config.test_globs;
+    let globset = to_globset(test_globs)?;
     for entry in WalkBuilder::new(working_directory.join(child_path))
         .build()
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| has_good_extension(e, &opt.file_extensions))
-        .filter(|e| {
-            is_empty_globs || globset.is_match(e.path()) ^ (source_config == SourceConfig::Main)
-        })
+        .filter(|e| path_is_match(e.path(), test_globs, &globset, &source_config))
     {
         let opt = opt.clone();
         let e = entry
@@ -636,15 +644,12 @@ mod tests {
     {
         let mut results: Vec<A> = Vec::default();
         let globset = to_globset(test_globs)?;
-        let is_empty_globs = test_globs.is_empty();
         for entry in WalkBuilder::new(working_directory.join(child_path))
             .build()
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| has_good_extension(e, file_extensions))
-            .filter(|e| {
-                is_empty_globs || globset.is_match(e.path()) ^ (source_config == SourceConfig::Main)
-            })
+            .filter(|e| path_is_match(e.path(), test_globs, &globset, &source_config))
         {
             let relative_path = entry
                 .path()
