@@ -7,7 +7,8 @@ use std::{
 use crate::{
     async_read_json_file,
     build_graph::{GraphMapping, GraphNode, GraphNodeMetadata},
-    extract_defrefs::{self, path_is_match}, to_directory, Opt, PrintBuildArgs,
+    extract_defrefs::{self, path_is_match},
+    to_directory, Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
 use ast::{Located, StmtKind};
