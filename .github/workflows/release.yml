@@ -60,17 +60,17 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download linux bzl-gen-build 22
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: bzl-gen-build-linux-ubuntu-22.04
           path: downloads
       - name: Download linux ubuntu 20 bzl-gen-build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: bzl-gen-build-linux-ubuntu-20.04
           path: downloads
       - name: Download macos bzl-gen-build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: bzl-gen-build-macos-x86
           path: downloads
