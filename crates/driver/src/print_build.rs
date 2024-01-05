@@ -7,13 +7,14 @@ use std::{
 use crate::{
     async_read_json_file,
     build_graph::{GraphMapping, GraphNode, GraphNodeMetadata},
+    extract_defrefs::{self, path_is_match},
     to_directory, Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
 use ast::{Located, StmtKind};
 use bzl_gen_build_python_utilities::{ast_builder, PythonProgram};
 use bzl_gen_build_shared_types::{
-    build_config::{TargetNameStrategy, WriteMode},
+    build_config::{SourceConfig, TargetNameStrategy, WriteMode},
     module_config::ModuleConfig,
     *,
 };
@@ -209,8 +210,9 @@ impl TargetEntries {
 async fn generate_targets<F, R>(
     opt: &'static Opt,
     project_conf: &'static ProjectConf,
+    source_conf: SourceConfig,
     graph_nodes: Vec<GraphNode>,
-    element: String,
+    element: &String,
     emitted_files: &mut Vec<PathBuf>,
     on_child: F,
 ) -> Result<TargetEntries>
@@ -218,15 +220,16 @@ where
     F: Fn(PathBuf, TargetEntries) -> R,
     R: Future<Output = Result<i32>> + Send + 'static,
 {
-    let mut module_config: Option<(&ModuleConfig, &'static str, &'static str)> = None;
+    let mut module_config: Option<&ModuleConfig> = None;
     for (_k, v) in project_conf.configurations.iter() {
-        let paths = v
-            .main_roots
-            .iter()
-            .map(|r| ("main", r))
-            .chain(v.test_roots.iter().map(|r| ("test", r)));
-        let matched_paths: Vec<(&str, &String)> = paths
-            .filter(|(_, p)| element.starts_with(p.as_str()))
+        let paths = if source_conf == SourceConfig::Main {
+            v.main_roots.clone()
+        } else {
+            v.test_roots.clone()
+        };
+        let matched_paths: Vec<String> = paths
+            .into_iter()
+            .filter(|p| element.starts_with(p.as_str()))
             .take(2)
             .collect();
 
@@ -236,36 +239,38 @@ where
         }
         if matched_paths.len() > 1 {
             return Err(anyhow::anyhow!(
-                "Found two many paths for {}, at least: {:?}",
+                "Found too many paths for {}, at least: {:?}",
                 element,
                 matched_paths
             ));
         }
         if module_config.is_none() {
-            let (path_type, path_prefix) = matched_paths.get(0).unwrap();
-            module_config = Some((v, path_type, path_prefix));
+            module_config = Some(v);
         } else {
             return Err(anyhow::anyhow!("Multiple configurations matched for {}, at least: {:?}; module config was before: {:?}", element, matched_paths, module_config));
         }
     }
-    let (module_config, path_type, _matched_prefix) = if let Some(a) = module_config {
+    let module_config = if let Some(a) = module_config {
         a
     } else {
-        return Err(anyhow!(
-            "Unable to find any matching configuration for {}",
-            element
-        ));
+        return Ok(Default::default());
     };
 
     let target_folder = opt.working_directory.join(&element);
     let base_name = to_file_name(&target_folder);
     let mut t: TargetEntries = Default::default();
+    let test_globs = &module_config.test_globs;
+    let globset = extract_defrefs::to_globset(test_globs)?;
     for graph_node in graph_nodes {
         let node_file = opt.working_directory.join(&graph_node.node_label);
         let node_file_name = to_file_name(&node_file);
+        let relative_path = node_file
+            .as_path()
+            .strip_prefix(opt.working_directory.as_path())?
+            .to_path_buf();
         let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
-        let (build_config, use_rglob) = if path_type == "test" {
-            (&module_config.build_config.test, true)
+        let (build_config, use_rglob) = if source_conf == SourceConfig::Test {
+            (&module_config.build_config.test, !opt.no_aggregate_source)
         } else {
             (&module_config.build_config.main, false)
         };
@@ -420,7 +425,6 @@ where
                 crate::build_graph::NodeType::RealNode => {
                     if !opt.no_aggregate_source {
                         parent_include_src.push(format!(":{}", filegroup_target_name));
-
                         let filegroup_target = TargetEntry {
                             name: filegroup_target_name.clone(),
                             extra_kv_pairs: Vec::default(),
@@ -435,7 +439,11 @@ where
                         };
                         t.entries.push(filegroup_target);
                     } else {
-                        parent_include_src.push(format!("{}", node_file_name));
+                        if path_is_match(&relative_path, test_globs, &globset, &source_conf) {
+                            parent_include_src.push(format!("{}", node_file_name));
+                        } else {
+                            continue; // continue for graph_nodes
+                        }
                     }
                 }
             }
@@ -766,8 +774,25 @@ async fn print_file(
     let t = generate_targets(
         opt,
         project_conf,
-        graph_nodes,
-        element,
+        SourceConfig::Main,
+        graph_nodes.clone(),
+        &element,
+        &mut emitted_files,
+        |sub_target: PathBuf, t: TargetEntries| async move {
+            let _handle = concurrent_io_operations.acquire().await?;
+            tokio::fs::write(&sub_target.clone(), t.emit_build_file()?)
+                .await
+                .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            Ok(0)
+        },
+    )
+    .await?;
+    let t2 = generate_targets(
+        opt,
+        project_conf,
+        SourceConfig::Test,
+        graph_nodes.clone(),
+        &element,
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
@@ -788,9 +813,21 @@ async fn print_file(
                 .append(true)
                 .open(&target_file)
                 .await?;
-            file.write(t.emit_build_file()?.as_bytes())
-                .await
-                .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
+
+            if !t.entries.is_empty() {
+                file.write(t.emit_build_file()?.as_bytes())
+                    .await
+                    .with_context(|| {
+                        format!("Attempting to write file data to {:?}", target_file)
+                    })?;
+            }
+            if !t2.entries.is_empty() {
+                file.write(t2.emit_build_file()?.as_bytes())
+                    .await
+                    .with_context(|| {
+                        format!("Attempting to write file data to {:?}", target_file)
+                    })?;
+            }
         }
         WriteMode::Overwrite => {
             let mut file = tokio::fs::OpenOptions::new()
@@ -799,9 +836,20 @@ async fn print_file(
                 .truncate(true)
                 .open(&target_file)
                 .await?;
-            file.write_all(t.emit_build_file()?.as_bytes())
-                .await
-                .with_context(|| format!("Attempting to write file data to {:?}", target_file))?;
+            if !t.entries.is_empty() {
+                file.write_all(t.emit_build_file()?.as_bytes())
+                    .await
+                    .with_context(|| {
+                        format!("Attempting to write file data to {:?}", target_file)
+                    })?;
+            }
+            if !t2.entries.is_empty() {
+                file.write(t2.emit_build_file()?.as_bytes())
+                    .await
+                    .with_context(|| {
+                        format!("Attempting to write file data to {:?}", target_file)
+                    })?;
+            }
         }
     }
     drop(handle);
@@ -951,6 +999,7 @@ mod tests {
                     },
                     main_roots: vec!["src/main/protos".to_string()],
                     test_roots: vec!["src/test/protos".to_string()],
+                    test_globs: vec![],
                 },
             )]),
             includes: vec![],
@@ -1012,6 +1061,7 @@ mod tests {
                     },
                     main_roots: vec!["src/main/protos".to_string()],
                     test_roots: vec!["src/test/protos".to_string()],
+                    test_globs: vec![],
                 },
             )]),
             includes: vec![],
@@ -1129,8 +1179,9 @@ py_proto_library(
         let target_entries = generate_targets(
             opt,
             boxed_project_conf,
+            SourceConfig::Main,
             build_graph,
-            element,
+            &element,
             &mut emitted_files,
             |_sub_target: PathBuf, _t: TargetEntries| async move { Ok(0) },
         )

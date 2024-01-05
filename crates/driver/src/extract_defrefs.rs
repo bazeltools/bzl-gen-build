@@ -12,10 +12,11 @@ use crate::{
 };
 use anyhow::{anyhow, Context, Result};
 use bzl_gen_build_shared_types::{
-    api::extracted_data::ExtractedData, internal_types::tree_node::TreeNode,
-    module_config::ModuleConfig, Directive, ProjectConf,
+    api::extracted_data::ExtractedData, build_config::SourceConfig,
+    internal_types::tree_node::TreeNode, module_config::ModuleConfig, Directive, ProjectConf,
 };
-use ignore::WalkBuilder;
+use globset::{Glob, GlobSet, GlobSetBuilder};
+use ignore::{DirEntry, WalkBuilder};
 use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
@@ -141,44 +142,115 @@ async fn process_file(
     }
 }
 
+// check that a file entry is a match
+fn has_good_extension(entry: &DirEntry, file_extensions: &Vec<OsString>) -> bool {
+    let entry_is_file = entry.file_type().map(|e| e.is_file()).unwrap_or(false);
+    entry_is_file && {
+        if let Some(ext) = entry.path().extension() {
+            let ext_match = file_extensions.iter().any(|e| e == ext);
+            ext_match
+        } else {
+            false
+        }
+    }
+}
+
+pub fn to_globset(test_globs: &Vec<String>) -> Result<GlobSet> {
+    let globset_builder = &mut GlobSetBuilder::new();
+    if test_globs.is_empty() {
+        Ok(globset_builder.add(Glob::new("**/*.*")?).build()?)
+    } else {
+        Ok(test_globs
+            .into_iter()
+            .fold(
+                Ok(globset_builder),
+                |builder: Result<&mut GlobSetBuilder, globset::Error>, glob| {
+                    builder.and_then(|b| Ok(b.add(Glob::new(glob.as_str())?)))
+                },
+            )?
+            .build()?)
+    }
+}
+
+pub fn path_is_match(
+    path: &Path,
+    test_globs: &Vec<String>,
+    test_globset: &GlobSet,
+    source_config: &SourceConfig,
+) -> bool {
+    let is_empty_globs = test_globs.is_empty();
+    is_empty_globs || {
+        // Path is a match if the path matches the test_globset, and it's SourceConfig::Test,
+        // or the patches does NOT match the test_globset, and it's SourceConfig::Main.
+        test_globset.is_match(path) ^ (source_config == &SourceConfig::Main)
+    }
+}
+
+async fn walk_directories<A, F, R>(
+    working_directory: &PathBuf,
+    child_path: String,
+    file_extensions: &Vec<OsString>,
+    test_globs: &Vec<String>,
+    source_config: SourceConfig,
+    extract_config: Option<Arc<ExtractConfig>>,
+    on_entry: F,
+) -> Result<Vec<A>>
+where
+    F: Fn(DirEntry, PathBuf, Option<Arc<ExtractConfig>>) -> R,
+    R: futures::Future<Output = Result<A>> + Send + 'static,
+{
+    let mut results: Vec<A> = Vec::default();
+    let globset = to_globset(test_globs)?;
+    for entry in WalkBuilder::new(working_directory.join(child_path))
+        .build()
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| has_good_extension(e, file_extensions))
+        .filter(|e| path_is_match(e.path(), test_globs, &globset, &source_config))
+    {
+        let relative_path = entry
+            .path()
+            .strip_prefix(working_directory.as_path())?
+            .to_path_buf();
+        results.push(on_entry(entry, relative_path, extract_config.clone()).await?);
+    }
+    Ok(results)
+}
+
 async fn async_extract_def_refs(
     working_directory: &'static PathBuf,
     child_path: String,
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
+    source_config: SourceConfig,
 ) -> Result<((PathBuf, Duration), Vec<ProcessedFile>)> {
-    let mut results: Vec<
-        tokio::task::JoinHandle<Result<(ProcessedFile, Duration), anyhow::Error>>,
-    > = Vec::default();
-    for entry in WalkBuilder::new(working_directory.join(child_path))
-        .build()
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().map(|e| e.is_file()).unwrap_or(false) {
-            let extension = entry.path().extension();
-            if let Some(ext) = extension {
-                if opt.file_extensions.iter().any(|e| e.as_os_str() == ext) {
-                    let opt = opt.clone();
-
-                    let e = entry
-                        .path()
-                        .strip_prefix(working_directory.as_path())?
-                        .to_path_buf();
-                    results.push(tokio::spawn(async move {
+    let test_globs = &opt.module_config.test_globs;
+    let file_extensions = &opt.file_extensions.clone();
+    let results = walk_directories(
+        working_directory,
+        child_path,
+        &file_extensions,
+        test_globs,
+        source_config,
+        Some(opt.clone()),
+        |entry, relative_path, opt_config| async move {
+            match opt_config {
+                Some(config) =>
+                    Ok(tokio::spawn(async move {
                         process_file(
-                            e,
+                            relative_path,
                             working_directory,
                             entry.into_path(),
                             concurrent_io_operations,
-                            opt,
+                            config,
                         )
                         .await
-                    }));
-                }
+                    })),
+                None => Err(anyhow::anyhow!("ExtractConfig not found"))
             }
-        }
-    }
+        },
+    ).await?;
+
     let mut max_duration = Duration::ZERO;
     let mut max_target = PathBuf::from("");
     let mut res2 = Vec::default();
@@ -266,8 +338,8 @@ fn extract_configs(
     project_conf: &'static ProjectConf,
     sha_to_extract_root: &Path,
     extractors: &Extractors,
-) -> Result<Vec<Arc<ExtractConfig>>> {
-    let mut cfgs: Vec<Arc<ExtractConfig>> = Vec::default();
+) -> Result<Vec<ExtractConfig>> {
+    let mut cfgs: Vec<ExtractConfig> = Vec::default();
     for (conf_key, v) in project_conf.configurations.iter() {
         let k: &str = conf_key.as_ref();
         let extractor = if let Some(ex) = extractors.0.get(k) {
@@ -281,12 +353,12 @@ fn extract_configs(
         let os_string_file_extensions: Vec<OsString> =
             v.file_extensions.iter().map(|ex| ex.into()).collect();
 
-        cfgs.push(Arc::new(ExtractConfig {
+        cfgs.push(ExtractConfig {
             extractor,
             sha_to_extract_root: sha_to_extract_root.to_path_buf(),
             module_config: v,
             file_extensions: os_string_file_extensions,
-        }));
+        });
     }
     Ok(cfgs)
 }
@@ -379,30 +451,35 @@ async fn run_extractors_on_data<'a>(
     sha_to_extract_root: &'a Path,
     extractors: &'a Extractors,
 ) -> Result<(Vec<Vec<ProcessedFile>>, (PathBuf, Duration))> {
-    let cfgs = extract_configs(opt, project_conf, sha_to_extract_root, extractors)?;
-
-    let mut all_visiting_paths: Vec<(String, Arc<ExtractConfig>)> = Vec::default();
-    for cfg in cfgs {
+    let cfgs: Vec<ExtractConfig> = extract_configs(opt, project_conf, sha_to_extract_root, extractors)?;
+    let cfg_refs: Vec<Arc<ExtractConfig>> = cfgs.into_iter().map(|cfg| Arc::new(cfg)).collect();
+    let mut all_visiting_paths = Vec::default();
+    for cfg in cfg_refs {
         all_visiting_paths.extend(
             cfg.module_config
                 .main_roots
                 .iter()
-                .chain(cfg.module_config.test_roots.iter())
-                .map(|e| (e.clone(), cfg.clone())),
+                .map(|e| (e.clone(), cfg.clone(), SourceConfig::Main)),
+        );
+        all_visiting_paths.extend(
+            cfg.module_config
+                .test_roots
+                .iter()
+                .map(|e| (e.clone(), cfg.clone(), SourceConfig::Test)),
         );
     }
 
     let mut async_join_handle: Vec<
         tokio::task::JoinHandle<Result<((PathBuf, Duration), Vec<ProcessedFile>)>>,
     > = Vec::default();
-    for (path, extract_config) in all_visiting_paths.into_iter() {
-        let extract_config = extract_config.clone();
+    for (path, extract_config, source_config) in all_visiting_paths.into_iter() {
         async_join_handle.push(tokio::spawn(async move {
             let r = async_extract_def_refs(
                 &opt.working_directory,
                 path,
                 concurrent_io_operations,
-                extract_config,
+                extract_config.clone(),
+                source_config,
             )
             .await?;
             Ok(r)
@@ -579,4 +656,41 @@ pub async fn extract_defrefs(
 
     write_json_file(extract.extracted_mappings.as_path(), &extracted_mappings)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[tokio::test]
+    async fn test_walk_directories_in_com() -> Result<(), Box<dyn std::error::Error>> {
+        let working_directory = fs::canonicalize(PathBuf::from("../../example"))?;
+        let child_path = "com".to_string();
+        let py_exts = vec![std::ffi::OsString::from("py")];
+        let test_globs = vec!["**/test*.py".to_string(), "**/*test.py".to_string()];
+        let result0 = walk_directories(
+            &working_directory,
+            child_path.clone(),
+            &py_exts,
+            &test_globs,
+            SourceConfig::Main,
+            None,
+            |_entry, relative_path, _| async move { Ok(relative_path) },
+        )
+        .await?;
+        assert_eq!(result0, vec![PathBuf::from("com/example/hello.py")]);
+        let result2 = walk_directories(
+            &working_directory,
+            child_path.clone(),
+            &py_exts,
+            &test_globs,
+            SourceConfig::Test,
+            None,
+            |_entry, relative_path, _| async move { Ok(relative_path) },
+        )
+        .await?;
+        assert_eq!(result2, vec![PathBuf::from("com/example/hello_test.py")]);
+        Ok(())
+    }
 }

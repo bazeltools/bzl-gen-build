@@ -263,6 +263,7 @@ dependencies = [
  "bzl_gen_build_shared_types",
  "clap",
  "futures",
+ "globset",
  "ignore",
  "lazy_static",
  "log",

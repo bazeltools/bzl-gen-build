@@ -243,7 +243,10 @@ mod tests {
         expected.sort();
 
         assert_eq!(
-            expand_path_to_defs("src/main/python/blah/ppp.py", "/Users/foo/bar/src/main/python/blah/ppp.py"),
+            expand_path_to_defs(
+                "src/main/python/blah/ppp.py",
+                "/Users/foo/bar/src/main/python/blah/ppp.py"
+            ),
             expected
         );
     }
@@ -265,7 +268,10 @@ mod tests {
         expected.sort();
 
         assert_eq!(
-            expand_path_to_defs("src/main/python/blah/src/main/ppp.py", "/Users/foo/bar/src/main/python/blah/src/main/ppp.py"),
+            expand_path_to_defs(
+                "src/main/python/blah/src/main/ppp.py",
+                "/Users/foo/bar/src/main/python/blah/src/main/ppp.py"
+            ),
             expected
         );
     }

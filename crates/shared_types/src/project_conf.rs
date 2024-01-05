@@ -172,7 +172,8 @@ mod tests {
                             secondary_rules: BTreeMap::default()
                         },
                         main_roots: vec!["src/main/python".to_string()],
-                        test_roots: vec!["src/test/python".to_string()]
+                        test_roots: vec!["src/test/python".to_string()],
+                        test_globs: vec![],
                     }
                 )]),
                 includes: vec![],

@@ -8,3 +8,6 @@ py_proto_library(name='aa_proto_py', deps=[':aa_proto'], visibility=['//visibili
 # ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 py_library(name='hello', srcs=['hello.py'], deps=['@@rules_python~0.24.0~pip~pip_39_pandas//:pkg'], visibility=['//visibility:public'])
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+py_test(name='hello_test', srcs=['hello_test.py'], deps=['//com/example:hello'], visibility=['//visibility:public'])
+# ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash

@@ -84,3 +84,10 @@ impl WriteMode {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Copy)]
+pub enum SourceConfig {
+    #[default]
+    Main,
+    Test,
+}

@@ -21,10 +21,15 @@
           "src/main/python"
         ],
         "test_roots": [
+          "com",
           "src/test/python",
           "tests"
         ],
-        "path_directives": []
+        "path_directives": [],
+        "test_globs": [
+          "**/test*.py",
+          "**/*test.py"
+        ]
       }
     }
   }

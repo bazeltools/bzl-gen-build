@@ -14,6 +14,9 @@ pub struct ModuleConfig {
 
     #[serde(default)]
     pub test_roots: Vec<String>,
+
+    #[serde(default)]
+    pub test_globs: Vec<String>,
 }
 
 impl ModuleConfig {
