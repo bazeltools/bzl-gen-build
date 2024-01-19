@@ -678,7 +678,7 @@ async fn load_initial_graph(
 
         forward_map.insert(m.clone(), idx);
         let node_external_state = NodeExternalState {
-            name: m.clone(),
+            name: m,
             node_type: NodeType::RealNode,
             binary_refs: binary_ref_directives,
             manual_refs: manual_ref_directives,
@@ -818,7 +818,7 @@ pub async fn build_graph(
     for li in load_i {
         let li = li.await??;
         for p in li.defs.into_iter() {
-            all_defs.entry(Arc::new(p.clone())).or_insert(ref_idx);
+            all_defs.entry(Arc::new(p)).or_insert(ref_idx);
             ref_idx += 1;
         }
     }
@@ -851,7 +851,7 @@ pub async fn build_graph(
     let mut graph = load_initial_graph(
         &extracted_mappings,
         &configured_entity_directives,
-        all_defs.clone(),
+        all_defs,
         concurrent_io_operations,
     )
     .await?;
@@ -897,10 +897,9 @@ pub async fn build_graph(
                 .get(&child_node)
                 .expect("Graph invalid if missing");
             if node_state.node_type == NodeType::RealNode {
-                output_node.child_nodes.insert(
-                    node_state.name.as_str().to_string(),
-                    node_state.as_ref().into(),
-                );
+                output_node
+                    .child_nodes
+                    .insert(node_state.name.as_ref().clone(), node_state.as_ref().into());
             }
         }
 

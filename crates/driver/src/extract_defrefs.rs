@@ -96,15 +96,13 @@ async fn process_file(
     };
     let st = Instant::now();
 
-    let target_path = opt.sha_to_extract_root.join(format!("{}", sha256));
-
     let processed_file = ProcessedFile {
-        file_path: path.clone(),
+        file_path: path,
         sha256,
-        extract_path: target_path.clone(),
+        extract_path: opt.sha_to_extract_root.join(format!("{}", sha256)),
     };
 
-    if target_path.exists() {
+    if processed_file.extract_path.exists() {
         Ok((processed_file, st.elapsed()))
     } else {
         use tokio::process::Command;
@@ -121,7 +119,9 @@ async fn process_file(
         command
             .arg("--label-or-repo-path")
             .arg(relative_path.as_path());
-        command.arg("--output").arg(target_path.as_path());
+        command
+            .arg("--output")
+            .arg(processed_file.extract_path.as_path());
         command.kill_on_drop(true);
         let status = {
             let mut spawned_child = command.spawn()?;
@@ -132,10 +132,10 @@ async fn process_file(
         if !status.success() {
             return Err(anyhow!("Failed to run program {:#?}", command));
         }
-        if !target_path.exists() {
+        if !processed_file.extract_path.exists() {
             return Err(anyhow!(
                 "Ran sub process but the cache path doesn't exist still, expected it at {:?}",
-                target_path
+                processed_file.extract_path
             ));
         }
         Ok((processed_file, st.elapsed()))
@@ -225,7 +225,7 @@ async fn async_extract_def_refs(
     source_config: SourceConfig,
 ) -> Result<((PathBuf, Duration), Vec<ProcessedFile>)> {
     let test_globs = &opt.module_config.test_globs;
-    let file_extensions = &opt.file_extensions.clone();
+    let file_extensions = &opt.file_extensions;
     let results = walk_directories(
         working_directory,
         child_path,
@@ -235,34 +235,31 @@ async fn async_extract_def_refs(
         Some(opt.clone()),
         |entry, relative_path, opt_config| async move {
             match opt_config {
-                Some(config) =>
-                    Ok(tokio::spawn(async move {
-                        process_file(
-                            relative_path,
-                            working_directory,
-                            entry.into_path(),
-                            concurrent_io_operations,
-                            config,
-                        )
-                        .await
-                    })),
-                None => Err(anyhow::anyhow!("ExtractConfig not found"))
+                Some(config) => Ok(tokio::spawn(process_file(
+                    relative_path,
+                    working_directory,
+                    entry.into_path(),
+                    concurrent_io_operations,
+                    config,
+                ))),
+                None => Err(anyhow::anyhow!("ExtractConfig not found")),
             }
         },
-    ).await?;
+    )
+    .await?;
 
     let mut max_duration = Duration::ZERO;
     let mut max_target = PathBuf::from("");
-    let mut res2 = Vec::default();
+    let mut processed_files = Vec::default();
     for r in results {
         let (e, dur) = r.await??;
         if dur > max_duration {
             max_duration = dur;
             max_target = e.file_path.clone();
         }
-        res2.push(e);
+        processed_files.push(e);
     }
-    Ok(((max_target, max_duration), res2))
+    Ok(((max_target, max_duration), processed_files))
 }
 
 async fn merge_defrefs(
@@ -387,7 +384,7 @@ async fn inner_load_external(
     let processed_file = ProcessedFile {
         file_path: path.clone(),
         sha256,
-        extract_path: path.clone(),
+        extract_path: path,
     };
     let work_items = vec![processed_file];
     merge_defrefs(
@@ -421,18 +418,15 @@ async fn load_external(
             let path = entry.into_path();
 
             let sha_of_conf_config = sha_of_conf_config.clone();
-            results.push(tokio::spawn(async move {
-                inner_load_external(
-                    opt,
-                    extract,
-                    project_conf,
-                    concurrent_io_operations,
-                    path,
-                    path_sha_to_merged_defrefs,
-                    sha_of_conf_config,
-                )
-                .await
-            }));
+            results.push(tokio::spawn(inner_load_external(
+                opt,
+                extract,
+                project_conf,
+                concurrent_io_operations,
+                path,
+                path_sha_to_merged_defrefs,
+                sha_of_conf_config,
+            )));
         }
     }
     let mut res2 = Vec::default();
@@ -451,7 +445,8 @@ async fn run_extractors_on_data<'a>(
     sha_to_extract_root: &'a Path,
     extractors: &'a Extractors,
 ) -> Result<(Vec<Vec<ProcessedFile>>, (PathBuf, Duration))> {
-    let cfgs: Vec<ExtractConfig> = extract_configs(opt, project_conf, sha_to_extract_root, extractors)?;
+    let cfgs: Vec<ExtractConfig> =
+        extract_configs(opt, project_conf, sha_to_extract_root, extractors)?;
     let cfg_refs: Vec<Arc<ExtractConfig>> = cfgs.into_iter().map(|cfg| Arc::new(cfg)).collect();
     let mut all_visiting_paths = Vec::default();
     for cfg in cfg_refs {
@@ -473,17 +468,13 @@ async fn run_extractors_on_data<'a>(
         tokio::task::JoinHandle<Result<((PathBuf, Duration), Vec<ProcessedFile>)>>,
     > = Vec::default();
     for (path, extract_config, source_config) in all_visiting_paths.into_iter() {
-        async_join_handle.push(tokio::spawn(async move {
-            let r = async_extract_def_refs(
-                &opt.working_directory,
-                path,
-                concurrent_io_operations,
-                extract_config.clone(),
-                source_config,
-            )
-            .await?;
-            Ok(r)
-        }));
+        async_join_handle.push(tokio::spawn(async_extract_def_refs(
+            &opt.working_directory,
+            path,
+            concurrent_io_operations,
+            extract_config.clone(),
+            source_config,
+        )));
     }
 
     let mut results: Vec<Vec<ProcessedFile>> = Vec::with_capacity(async_join_handle.len());
@@ -553,8 +544,6 @@ pub async fn extract_defrefs(
     let sha_of_conf: Sha256Value = merged_config_str.as_bytes().into();
     let sha_of_conf_config = Arc::new(format!("{}", sha_of_conf));
 
-    let extractors = load_extractors(extract).await?;
-
     let sha_to_extract_root = Box::leak(Box::new(opt.cache_path.join("sha_to_extract")));
     if !sha_to_extract_root.exists() {
         std::fs::create_dir_all(&sha_to_extract_root)?;
@@ -567,7 +556,10 @@ pub async fn extract_defrefs(
     }
     let st = Instant::now();
 
-    let probe_files = tokio::spawn(async move {
+    // we use the move here to establish a lifetime for the references that only
+    // live for the scope of this await
+    let extractors = load_extractors(extract).await?;
+    let fut = async move {
         run_extractors_on_data(
             opt,
             project_conf,
@@ -576,7 +568,8 @@ pub async fn extract_defrefs(
             &extractors,
         )
         .await
-    });
+    };
+    let probe_files = tokio::spawn(fut);
 
     let external_expanded: Vec<(String, ExtractedMapping)> =
         if let Some(external) = &extract.external_generated_root {
@@ -624,20 +617,15 @@ pub async fn extract_defrefs(
         }
 
         for (entry, files) in work.into_iter() {
-            let sha_of_conf_config = sha_of_conf_config.clone();
-            let path_sha_to_merged_defrefs = path_sha_to_merged_defrefs;
-            merge_work.push(tokio::spawn(async move {
-                merge_defrefs(
-                    concurrent_io_operations,
-                    path_sha_to_merged_defrefs,
-                    entry,
-                    project_conf,
-                    files,
-                    sha_of_conf_config,
-                    opt.no_aggregate_source,
-                )
-                .await
-            }))
+            merge_work.push(tokio::spawn(merge_defrefs(
+                concurrent_io_operations,
+                path_sha_to_merged_defrefs,
+                entry,
+                project_conf,
+                files,
+                sha_of_conf_config.clone(),
+                opt.no_aggregate_source,
+            )))
         }
     }
 
