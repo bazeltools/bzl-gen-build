@@ -1,7 +1,7 @@
 package io.bazeltools.buildgen.scaladefref
 
-import cats.Monad
-import cats.data.{Chain, NonEmptyList, State, Writer}
+import cats.{Monad, Monoid, Semigroup}
+import cats.data.{Chain, NonEmptyList, State, Validated, Writer}
 import cats.effect.IO
 import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.meta.inputs.Input
@@ -23,33 +23,83 @@ import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
 object ScalaSourceEntityExtractor {
-  case class ParseException(parseError: Parsed.Error)
-      extends Exception(s"parse error: $parseError")
+  sealed abstract class Err(message: String) extends Exception(message)
 
-  def parseDirectives(src: Source): Chain[String] = {
-    import scala.meta.tokens.Token
-    cats.Monoid.combineAll(src.tokens.collect { case Token.Comment(c) =>
-      val str = c.toString
-      Entity.findDirectives(str) match {
-        case Right(ds) => ds
-        case Left(err) =>
-          sys.error(s"couldn't parse\n${str}\n-------------\n$err")
+  case class ScalaMetaParseException(parseError: Parsed.Error)
+      extends Err(s"scalameta raised parse error: $parseError")
+
+  case class DirectiveParseException(comment: String, errorMessage: String)
+      extends Err(
+        s"couldn't parse directive comment:\n$comment\n-------------\n$errorMessage"
+      )
+
+  def allMessages(err: Err): Chain[String] = {
+    @annotation.tailrec
+    def loop(err: List[Err], acc: Chain[String]): Chain[String] =
+      err match {
+        case (head @ (ScalaMetaParseException(_) |
+            DirectiveParseException(_, _))) :: tail =>
+          loop(tail, acc :+ head.getMessage())
+        case CombinedErr(left, right) :: tail =>
+          loop(left :: right :: tail, acc)
+        case Nil => acc
       }
-    })
+
+    loop(err :: Nil, Chain.empty)
   }
 
-  def extract(content: String): IO[Symbols] =
-    Input
+  case class CombinedErr(first: Err, second: Err)
+      extends Err(
+        (allMessages(first) ++ allMessages(second))
+          .mkString_("combined ScalaSourceEntityExtractor errs:", "\n\t", "\n")
+      )
+
+  implicit val semigroupErr: Semigroup[Err] =
+    new Semigroup[Err] {
+      def combine(left: Err, right: Err): Err = CombinedErr(left, right)
+    }
+
+  def parseDirectives(src: Source): IO[Chain[String]] = {
+    import scala.meta.tokens.Token
+    val maybeParsed: Chain[Validated[Err, String]] =
+      Monoid.combineAll(
+        src.tokens.iterator.collect { case Token.Comment(c) =>
+          val str = c.toString
+          Entity.findDirectives(str) match {
+            case Right(ds) => ds.map(Validated.valid(_))
+            case Left(err) =>
+              Chain.one(
+                Validated.invalid(
+                  DirectiveParseException(comment = str, errorMessage = err)
+                )
+              )
+          }
+        }
+      )
+
+    // Sequence with Validated merges the Invalid with Semigroup
+    maybeParsed.sequence match {
+      case Validated.Valid(strs)  => IO.pure(strs)
+      case Validated.Invalid(err) => IO.raiseError(err)
+    }
+  }
+
+  def extract(content: String): IO[Symbols] = {
+    val parsed = Input
       .VirtualFile("Source.scala", content)
       .parse[Source]
-      .fold({ e => IO.raiseError(ParseException(e)) }, IO.pure(_))
-      .map { tree =>
-        val allDirectives = parseDirectives(tree)
-        val dr = getDefsRefs(tree)
-        allDirectives.foldLeft(dr) { case (prev, n) =>
-          prev.addBzlBuildGenCommand(n)
-        }
-      }
+
+    for {
+      tree <- parsed.fold(
+        { e => IO.raiseError(ScalaMetaParseException(e)) },
+        IO.pure(_)
+      )
+      allDirectives <- parseDirectives(tree)
+      dr = getDefsRefs(tree)
+    } yield allDirectives.foldLeft(dr) { case (prev, n) =>
+      prev.addBzlBuildGenCommand(n)
+    }
+  }
 
   // TODO: we have to track terms and types separately. We can't forget which ones have been defined
   // since we can have shadowing of one type that might look like another
@@ -273,7 +323,7 @@ object ScalaSourceEntityExtractor {
           Nil
         case _ =>
           sys.error(
-            s"Un expected term : $t  (class: ${t.getClass.getName} )hit when trying to unroll outer term: $outerTerm"
+            s"Unexpected term : $t  (class: ${t.getClass.getName} )hit when trying to unroll outer term: $outerTerm"
           )
       }
     }
