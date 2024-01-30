@@ -40,20 +40,21 @@ async fn async_extract_defs(
     let target_path = path_sha_to_exports.join(format!("{}", merged_sha));
 
     if !target_path.exists() {
-        let c = concurrent_io_operations.acquire().await?;
         let mut tree_nodes: HashSet<String> = HashSet::default();
+        let c = concurrent_io_operations.acquire().await?;
         for ele in work_items.iter() {
             let d: TreeNode = async_read_json_file(PathBuf::from(&ele.path).as_path())
                 .await
                 .with_context(|| format!("Was attempting to read file data: {:#?}", ele))?;
             tree_nodes.extend(d.defs);
         }
-        drop(c);
 
         let dd = DefsData {
             defs: tree_nodes.into_iter().collect(),
         };
         async_write_json_file(&target_path, dd).await?;
+        // release the semaphore after we are done with IO
+        drop(c);
     }
     Ok((directory, target_path.to_string_lossy().to_string()))
 }
@@ -74,43 +75,37 @@ pub async fn extract_exports(
     let extracted_mappings: ExtractedMappings = read_json_file(&extract.extracted_mappings)?;
 
     let mut work: HashMap<String, Vec<ExtractedMapping>> = HashMap::default();
-    for (rel_path, content_path) in extracted_mappings.relative_path_to_extractmapping.iter() {
+    for (rel_path, content_path) in extracted_mappings
+        .relative_path_to_extractmapping
+        .into_iter()
+    {
         let entry = if !opt.no_aggregate_source {
-            to_directory(rel_path.to_string())
+            to_directory(rel_path)
         } else {
-            rel_path.to_string()
+            rel_path
         };
         if let Some(v) = work.get_mut(&entry) {
-            v.push(content_path.clone());
+            v.push(content_path);
         } else {
-            work.insert(entry, vec![content_path.clone()]);
+            work.insert(entry, vec![content_path]);
         }
     }
 
     let mut visited_paths = stream::iter(work.into_iter()).map(|(directory, work_items)| {
         let path_sha_to_exports = path_sha_to_exports.clone();
-        tokio::spawn(async {
-            async_extract_defs(
-                concurrent_io_operations,
-                path_sha_to_exports,
-                directory,
-                work_items,
-            )
-            .await
-        })
+        tokio::spawn(async_extract_defs(
+            concurrent_io_operations,
+            path_sha_to_exports,
+            directory,
+            work_items,
+        ))
     });
 
     let mut result: HashMap<String, String> = HashMap::default();
 
     while let Some(r) = visited_paths.next().await {
-        let inner_r = r.await.map_err(|e| anyhow!("{:#?}", e))?;
-
-        match inner_r {
-            Ok((k, v)) => {
-                result.insert(k, v);
-            }
-            Err(e) => return Err(e),
-        }
+        let (k, v) = r.await.map_err(|e| anyhow!("{:#?}", e))??;
+        result.insert(k, v);
     }
 
     let r = PathToDefs {

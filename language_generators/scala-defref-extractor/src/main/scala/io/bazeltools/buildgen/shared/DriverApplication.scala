@@ -28,26 +28,70 @@ abstract class DriverApplication extends IOApp {
       )
     }
 
-  private[this] def extractDataBlocks(
+  private[this] def parallelExtractDataBlocks(
       workingDirectory: Path,
-      paths: String*
-  ): IO[List[DataBlock]] = {
-    paths.sorted.toList.traverse { path =>
-      for {
-        content <- readToString(workingDirectory.resolve(path))
-        try_e <- extract(content).attempt
-        e <- try_e match {
-          case Right(x) => IO.pure(x)
-          case Left(f) =>
-            IO.raiseError(
-              new Exception(
-                s"Failed in parsing of ${workingDirectory.resolve(path)}, with error\n$f"
-              )
-            )
+      paths: List[String]
+  ): IO[List[DataBlock]] =
+    paths.sorted
+      .traverse { path =>
+        // don't bother to parallelize reads, which are blocking operations
+        // which could cause cats-effect to allocate a ton of IO bound
+        // threads
+        readToString(workingDirectory.resolve(path))
+          .map((path, _))
+      }
+      .flatMap { inMemory =>
+        // now that the data is in-memory,
+        // in parallel using cpu-bound threadpool
+        // which is limited to the number of CPUs
+        // we can parse all the code
+        inMemory.parTraverse { case (path, content) =>
+          extract(content).attempt
+            .flatMap {
+              case Right(x) => IO.pure(x)
+              case Left(err) =>
+                IO.raiseError(
+                  new Exception(
+                    s"Failed in parsing of ${workingDirectory.resolve(path)}, with error\n$err",
+                    err
+                  )
+                )
+            }
+            .map(_.withEntityPath(path))
         }
-      } yield e.withEntityPath(path)
-    }
-  }
+      }
+
+  private[this] def sequentialExtractDataBlocks(
+      workingDirectory: Path,
+      paths: List[String]
+  ): IO[List[DataBlock]] =
+    paths.sorted
+      .traverse { path =>
+        val fullPath = workingDirectory.resolve(path)
+        for {
+          content <- readToString(fullPath)
+          try_e <- extract(content).attempt
+          symbols <- try_e match {
+            case Right(x) => IO.pure(x)
+            case Left(err) =>
+              IO.raiseError(
+                new Exception(
+                  s"Failed in parsing of $fullPath, with error\n$err",
+                  err
+                )
+              )
+          }
+        } yield symbols.withEntityPath(path)
+      }
+
+  private[this] def extractDataBlocks(
+      parallel: Boolean,
+      workingDirectory: Path,
+      paths: List[String]
+  ): IO[List[DataBlock]] =
+    if (parallel) parallelExtractDataBlocks(workingDirectory, paths)
+    else sequentialExtractDataBlocks(workingDirectory, paths)
+
   def main: Command[IO[ExitCode]] = decline.Command(
     name,
     "Extract definitions and references from source files"
@@ -56,20 +100,24 @@ abstract class DriverApplication extends IOApp {
       Opts.option[String]("relative-input-paths", "input files to process"),
       Opts.option[Path]("working-directory", "input files to process"),
       Opts.option[String]("label-or-repo-path", "label to assign these files"),
-      Opts.option[Path]("output", "target location to write to")
-    ).mapN { (inputs, workingDirectory, label_or_repo_path, outputPath) =>
-      IO.pure(ExitCode.Success)
-      for {
-        dataBlocks <- extractDataBlocks(
-          workingDirectory,
-          inputs.split(',').toList: _*
-        )
-        extractedData = ExtractedData(
-          label_or_repo_path = label_or_repo_path,
-          data_blocks = dataBlocks
-        )
-        _ <- writeJson(outputPath, extractedData)
-      } yield ExitCode.Success
+      Opts.option[Path]("output", "target location to write to"),
+      Opts
+        .flag("sequential", "force parsing to be sequential to save memory")
+        .orFalse
+    ).mapN {
+      (inputs, workingDirectory, label_or_repo_path, outputPath, sequential) =>
+        for {
+          dataBlocks <- extractDataBlocks(
+            parallel = !sequential,
+            workingDirectory,
+            inputs.split(',').toList
+          )
+          extractedData = ExtractedData(
+            label_or_repo_path = label_or_repo_path,
+            data_blocks = dataBlocks
+          )
+          _ <- writeJson(outputPath, extractedData)
+        } yield ExitCode.Success
     }
   }
 

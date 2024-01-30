@@ -106,10 +106,7 @@ where
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
 
-    let v: T = serde_json::from_str(contents.as_str())?;
-
-    drop(contents);
-    Ok(v)
+    Ok(serde_json::from_str(contents.as_str())?)
 }
 
 pub async fn async_read_json_file<T>(p: &Path) -> Result<T>
@@ -123,26 +120,21 @@ where
     let mut contents = String::with_capacity(file_len as usize);
     file.read_to_string(&mut contents).await?;
 
-    let v: T = serde_json::from_str(contents.as_str())?;
-
-    drop(contents);
-    Ok(v)
+    Ok(serde_json::from_str(contents.as_str())?)
 }
 
 pub fn write_json_file<T>(p: &Path, value: T) -> Result<()>
 where
     T: serde::Serialize,
 {
-    std::fs::write(p, serde_json::to_string_pretty(&value)?)?;
-    Ok(())
+    Ok(std::fs::write(p, serde_json::to_string_pretty(&value)?)?)
 }
 
 pub async fn async_write_json_file<T>(p: &Path, value: T) -> Result<()>
 where
     T: serde::Serialize,
 {
-    tokio::fs::write(p, serde_json::to_string_pretty(&value)?).await?;
-    Ok(())
+    Ok(tokio::fs::write(p, serde_json::to_string_pretty(&value)?).await?)
 }
 
 fn maybe_add_working_directory<'a, 'b>(

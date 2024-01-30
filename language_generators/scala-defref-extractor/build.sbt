@@ -6,18 +6,18 @@ version := "1.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1"
 libraryDependencies += "com.monovore" %% "decline" % "2.2.0"
 libraryDependencies += "org.scalameta" %% "scalameta" % "4.6.0"
-libraryDependencies += "org.typelevel" %% "cats-effect" % "3.4.2"
-libraryDependencies += "org.typelevel" %% "cats-parse" % "0.3.6"
-libraryDependencies += "io.circe" %% "circe-core" % "0.14.3"
-libraryDependencies += "io.circe" %% "circe-parser" % "0.14.3"
-libraryDependencies += "io.circe" %% "circe-generic" % "0.14.3"
+libraryDependencies += "org.typelevel" %% "cats-effect" % "3.5.3"
+libraryDependencies += "org.typelevel" %% "cats-parse" % "1.0.0"
+libraryDependencies += "io.circe" %% "circe-core" % "0.14.6"
+libraryDependencies += "io.circe" %% "circe-parser" % "0.14.6"
+libraryDependencies += "io.circe" %% "circe-generic" % "0.14.6"
 libraryDependencies += "com.github.javaparser" % "javaparser-core" % "3.24.9"
 
-libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test
-libraryDependencies += "org.scalameta" %% "munit-scalacheck" % "0.7.29" % Test
+libraryDependencies += "org.scalameta" %% "munit" % "1.0.0-M10" % Test
+libraryDependencies += "org.scalameta" %% "munit-scalacheck" % "1.0.0-M10" % Test
 libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.14" % Test
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.14" % Test
-libraryDependencies += "org.typelevel" %% "munit-cats-effect-3" % "1.0.7" % Test
+libraryDependencies += "org.typelevel" %% "munit-cats-effect" % "2.0.0-M4" % Test
 
 
 // from: https://nathankleyn.com/2019/05/13/recommended-scalac-flags-for-2-13/
