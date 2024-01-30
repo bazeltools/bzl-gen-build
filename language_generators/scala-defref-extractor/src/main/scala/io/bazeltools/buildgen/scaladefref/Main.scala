@@ -1,6 +1,6 @@
 package io.bazeltools.buildgen.scaladefref
 
-import cats.effect.{IO}
+import cats.effect.IO
 import io.bazeltools.buildgen.shared.{Symbols, DriverApplication}
 
 object Main extends DriverApplication {
