@@ -20,7 +20,6 @@ def _jar_scanner_impl(target, ctx):
     if hasattr(files, "deps"):
         info = target[DefaultInfo]
 
-        # this is a java_proto_library
         for jar in info.files.to_list():
             if jar.basename.endswith("-src.jar"):
                 None
@@ -39,7 +38,6 @@ def _jar_scanner_impl(target, ctx):
                 name = name[:-6]
             all_jars0 = [jar for jar in all_jars if name in jar.short_path]
 
-            # all_jars = [all_jars[-1]]
             if len(all_jars0) == 0:
                 all_jars = [all_jars[-1]]
             else:
