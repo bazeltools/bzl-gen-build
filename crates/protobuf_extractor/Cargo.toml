@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.79"
-tokio = { version = "1.35.1", features = ["full"] }
+tokio = { version = "1.36.0", features = ["full"] }
 clap = { version = "4.4.18", features = ["derive"] }
-serde = { version = "1.0.195", features = ["derive"] }
+serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0.113"
 pretty_env_logger = "0.5.0"
 log = "0.4.20"
@@ -15,7 +15,7 @@ tree-sitter = "0.19.3"
 tree-sitter-proto = { git = "https://github.com/mitchellh/tree-sitter-proto.git", rev = "42d82fa18f8afe59b5fc0b16c207ee4f84cb185f"}
 
 [dev-dependencies]
-tempfile = "3.9.0"
+tempfile = "3.10.0"
 
 [dependencies.bzl_gen_build_shared_types]
 path = "../shared_types"
