@@ -1,0 +1,5 @@
+{
+  "includes": [
+    "build_tools/lang_support/create_lang_build_files/bazel_jvm_modules_java.json"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "configurations": {
+    "java": {
+      "file_extensions": [
+        "java"
+      ],
+      "build_config": {
+        "main": {
+          "headers": [],
+          "function_name": "java_library"
+        },
+        "test": {
+          "headers": [
+            {
+              "load_from": "//build_tools/lang_support/java/test:junit.bzl",
+              "load_value": "junit_tests"
+            }
+          ],
+          "function_name": "junit_tests"
+        },
+        "binary_application": {
+          "headers": [
+            {
+              "load_from": "//build_tools/lang_support/java:java_binary.bzl",
+              "load_value": "java_binary"
+            }
+          ],
+          "function_name": "java_binary"
+        }
+      },
+      "main_roots": [
+        "src/main/java"
+      ],
+      "test_roots": [
+        "src/test/java"
+      ]
+    }
+  }
+}

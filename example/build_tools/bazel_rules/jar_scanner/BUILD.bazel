@@ -1,0 +1,5 @@
+py_binary(
+    name = "py_build_commands",
+    srcs = ["py_build_commands.py"],
+    visibility = ["//visibility:public"],
+)

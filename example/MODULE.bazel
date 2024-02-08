@@ -6,6 +6,8 @@ module(
 
 bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "rules_python", version = "0.24.0")
+bazel_dep(name = "rules_jvm_external", version = "4.5")
+
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
     python_version = "3.9",
@@ -18,3 +20,12 @@ pip.parse(
     requirements_lock = "//:requirements_lock_3_9.txt",
 )
 use_repo(pip, "pip", "pip_39")
+
+maven = use_extension(":maven.bzl", "maven")
+maven.install(
+    artifacts = [
+        "ch.epfl.scala:::scalafix-cli:0.11.0",
+        "org.slf4j:slf4j-api:1.7.28",
+    ],
+)
+use_repo(maven, "maven")
