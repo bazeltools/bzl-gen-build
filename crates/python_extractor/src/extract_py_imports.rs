@@ -145,4 +145,27 @@ def my_fn():
         expected.dedup();
         assert_eq!(extract(&parsed), expected)
     }
+
+    #[test]
+    fn test_syntax_constructs() {
+        let python_source = r#"
+from typing import Union
+from foo import perform_cast
+value = 1
+args = [int, float]
+# this is a legal-in-runtime construction
+def perform_cast(value, Union[*args])
+# walrus operator
+x := y := 1
+        "#;
+
+        let parsed = PythonProgram::parse(python_source, "tmp.py").unwrap();
+        let mut expected = vec![
+            "typing.Union".to_string(),
+            "foo.perform_cast".to_string(),
+        ];
+        expected.sort();
+        expected.dedup();
+        assert_eq!(extract(&parsed), expected)
+    }
 }
