@@ -5,9 +5,7 @@ set -o nounset  # abort on unbound variable
 set -o pipefail # don't hide errors within pipes
 
 cd example
-TOOLING_WORKING_DIRECTORY=/tmp/bzl-gen-build source build_tools/lang_support/create_lang_build_files/delete_build_files.sh
-TOOLING_WORKING_DIRECTORY=/tmp/bzl-gen-build source build_tools/lang_support/create_lang_build_files/regenerate_protos_build_files.sh
-TOOLING_WORKING_DIRECTORY=/tmp/bzl-gen-build source build_tools/lang_support/create_lang_build_files/regenerate_python_build_files.sh
+TOOLING_WORKING_DIRECTORY=/tmp/bzl-gen-build source build_tools/lang_support/create_lang_build_files/regenerate.sh
 bazel test ...
 
 changes=$(git diff --name-only --diff-filter=ACMRT | xargs)

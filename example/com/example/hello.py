@@ -1,4 +1,5 @@
 import pandas as pd
+from com.example.aa_pb2 import A
 
 FOO = [""]
 

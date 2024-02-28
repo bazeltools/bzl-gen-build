@@ -1,7 +1,4 @@
 def _wheel_scanner_impl(target, ctx):
-    if not target.label.workspace_name.startswith("rules_python"):
-        return []
-
     # Make sure the rule has a srcs attribute.
     out_content = ctx.actions.declare_file("%s_wheel_scanner.json" % (target.label.name))
 
@@ -21,6 +18,14 @@ def _wheel_scanner_impl(target, ctx):
                     fail("Didn't have workspace prefix")
                 all_py_relative_paths.append(path[len(workspace_root) + 1:])
                 all_py_files.append(file)
+    elif ctx.rule.kind == "py_proto_library":
+        info = target[DefaultInfo]
+        last_file = info.files.to_list()[-1]
+        parts = last_file.path.split("/bin/", 1)
+        workspace_root = "./{}/bin".format(parts[0])
+        relative_path = parts[1]
+        all_py_relative_paths.append(relative_path)
+        all_py_files.append(last_file)
 
     input_files = ctx.actions.declare_file("%s_wheel_scanner_input_files.txt" % (target.label.name))
     ctx.actions.write(
@@ -33,10 +38,11 @@ def _wheel_scanner_impl(target, ctx):
     args.add("--label-or-repo-path")
     args.add(str(target.label))
 
-    args.add("--import-path-relative-from")
-    args.add("%s/" % (target.label.workspace_root))
+    if workspace_root != "":
+        args.add("--import-path-relative-from")
+        args.add("%s/" % (workspace_root))
     args.add("--working-directory")
-    args.add(target.label.workspace_root)
+    args.add(workspace_root)
     args.add("--relative-input-paths")
     args.add("@%s" % input_files.path)
     args.add("--output")
