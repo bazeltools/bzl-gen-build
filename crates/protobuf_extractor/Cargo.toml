@@ -10,7 +10,7 @@ clap = { version = "4.5.1", features = ["derive"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 pretty_env_logger = "0.5.0"
-log = "0.4.20"
+log = "0.4.21"
 tree-sitter = "0.19.3"
 tree-sitter-proto = { git = "https://github.com/mitchellh/tree-sitter-proto.git", rev = "42d82fa18f8afe59b5fc0b16c207ee4f84cb185f"}
 
