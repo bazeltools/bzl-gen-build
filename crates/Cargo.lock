@@ -324,7 +324,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "tree-sitter",
+ "tree-sitter 0.21.0",
  "tree-sitter-proto",
 ]
 
@@ -356,11 +356,12 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.79"
+version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
+checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
 dependencies = [
  "jobserver",
+ "libc",
 ]
 
 [[package]]
@@ -1781,12 +1782,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "705bf7c0958d0171dd7d3a6542f2f4f21d87ed5f1dc8db52919d3a6bed9a359a"
+dependencies = [
+ "cc",
+ "regex",
+]
+
+[[package]]
 name = "tree-sitter-proto"
 version = "0.0.1"
 source = "git+https://github.com/mitchellh/tree-sitter-proto.git?rev=42d82fa18f8afe59b5fc0b16c207ee4f84cb185f#42d82fa18f8afe59b5fc0b16c207ee4f84cb185f"
 dependencies = [
  "cc",
- "tree-sitter",
+ "tree-sitter 0.19.5",
 ]
 
 [[package]]
