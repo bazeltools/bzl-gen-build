@@ -116,11 +116,13 @@ mod tests {
 from tensorflow.keras.layers import MultiHeadAttention, Concatenate, Add, Dense
 
 from src.main.python.foo.bar.baz import NumericalEmbedding
+# relative imports should be resolved relative to the file path
+from .field import field
 def my_fn():
   from x.y.z import a as p
         "#;
 
-        let parsed = PythonProgram::parse(python_source, "tmp.py").unwrap();
+        let parsed = PythonProgram::parse(python_source, "foo/tmp.py").unwrap();
         let mut expected = vec![
             "tensorflow".to_string(),
             "tensorflow.keras".to_string(),
@@ -136,6 +138,8 @@ def my_fn():
             "src.main.python.foo.bar".to_string(),
             "src.main.python.foo.bar.baz".to_string(),
             "src.main.python.foo.bar.baz.NumericalEmbedding".to_string(),
+            "foo.field".to_string(),
+            "foo.field.field".to_string(),
             "x".to_string(),
             "x.y".to_string(),
             "x.y.z".to_string(),
