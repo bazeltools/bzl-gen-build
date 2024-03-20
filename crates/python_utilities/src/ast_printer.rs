@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use ast::{Arguments, Located, StmtKind};
 use rustpython_parser::ast;
+use ast::{Arguments, Stmt};
 
 use crate::PythonProgram;
 
@@ -63,7 +63,7 @@ fn emit_args<'a>(args: &'a Arguments, str_buffer: &mut WritingBuffer<'a>) {
             str_buffer.push(Cow::Borrowed(", "));
         }
         first_arg = false;
-        let positional_arg = &positional_arg.node;
+        let positional_arg = &positional_arg.def;
         if positional_arg.annotation.is_some() {
             panic!("Annotation printing not supported {:#?}", positional_arg);
         }
@@ -73,34 +73,29 @@ fn emit_args<'a>(args: &'a Arguments, str_buffer: &mut WritingBuffer<'a>) {
     if args.kwarg.is_some() {
         panic!("KW arg printing not supported {:#?}", args);
     }
-    if !args.kw_defaults.is_empty() {
-        panic!("kw_defaults arg printing not supported {:#?}", args);
-    }
-
     if !args.kwonlyargs.is_empty() {
         panic!("kwonlyargs arg printing not supported {:#?}", args);
     }
-
-    if !args.defaults.is_empty() {
-        panic!("defaults arg printing not supported {:#?}", args);
-    }
 }
-fn emit_body<'a>(body: &'a [Located<StmtKind>], str_buffer: &mut WritingBuffer<'a>) {
-    for located_stmnt in body.iter() {
-        match &located_stmnt.node {
-            ast::StmtKind::Import { names: _ } => todo!(),
-            ast::StmtKind::FunctionDef {
+fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
+    for stmt in body.iter() {
+        match &stmt {
+            Stmt::Import(ast::StmtImport { range: _ , names: _ }) =>
+                todo!(),
+            Stmt::FunctionDef(ast::StmtFunctionDef {
+                range: _,
                 name,
                 args,
                 body,
                 decorator_list,
                 returns: _,
                 type_comment: _,
-            } => {
+                type_params: _,
+            }) => {
                 if !decorator_list.is_empty() {
                     panic!(
                         "Have not implemented how to print function with decorators: {:?}",
-                        located_stmnt.node
+                        stmt
                     )
                 }
                 str_buffer.push(Cow::Borrowed("def "));
@@ -116,12 +111,13 @@ fn emit_body<'a>(body: &'a [Located<StmtKind>], str_buffer: &mut WritingBuffer<'
                 str_buffer.finish_line();
             }
 
-            ast::StmtKind::ImportFrom {
+            Stmt::ImportFrom(ast::StmtImportFrom {
+                range: _,
                 module,
                 names,
                 level,
-            } => {
-                if level.is_some() && level != &Some(0) {
+            }) => {
+                if level.is_some() && level != &Some(ast::Int::new(0)) {
                     panic!(
                         "Have not implemented how to print: {:?}, {:?}, {:?}",
                         module, names, level
@@ -141,38 +137,41 @@ fn emit_body<'a>(body: &'a [Located<StmtKind>], str_buffer: &mut WritingBuffer<'
                             str_buffer.push(Cow::Borrowed(","));
                         }
                         first = false;
-                        if let Some(as_name) = &nme.node.asname {
-                            str_buffer.push(Cow::Borrowed(nme.node.name.as_str()));
+                        if let Some(as_name) = &nme.asname {
+                            str_buffer.push(Cow::Borrowed(nme.name.as_str()));
                             str_buffer.push(Cow::Borrowed(" as "));
                             str_buffer.push(Cow::Borrowed(as_name.as_str()));
                         } else {
-                            str_buffer.push(Cow::Borrowed(nme.node.name.as_str()));
+                            str_buffer.push(Cow::Borrowed(nme.name.as_str()));
                         }
                     }
                 }
 
                 str_buffer.finish_line();
             }
-            ast::StmtKind::Pass => {
+            Stmt::Pass(ast::StmtPass { range: _ }) => {
                 str_buffer.push(Cow::Borrowed("pass"));
                 str_buffer.finish_line()
             }
 
-            ast::StmtKind::Expr { value } => {
+            Stmt::Expr(ast::StmtExpr {
+                range: _,
+                value
+            }) => {
                 str_buffer.push(Cow::Owned(format!("{}", value)));
                 str_buffer.finish_line()
             }
             _ => {
                 panic!(
                     "Have not implemented how to print: {:?}",
-                    located_stmnt.node
+                    stmt
                 )
             }
         }
     }
 }
 
-fn program_to_string(program: &[Located<StmtKind>]) -> String {
+fn program_to_string(program: &[Stmt]) -> String {
     let mut write_buf = WritingBuffer::new();
     emit_body(program, &mut write_buf);
     write_buf.finish()

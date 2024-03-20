@@ -18,8 +18,8 @@ thiserror = "1.0.58"
 lazy_static = "1.4.0"
 ignore = "0.4.22"
 globset = "0.4.14"
-rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7"}
-rustpython-ast = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7", features = ["unparse"]}
+rustpython-parser = "0.3.0"
+rustpython-ast = { version = "0.3.0", features = ["unparse"] }
 pretty_env_logger = "0.5.0"
 log = "0.4.21"
 

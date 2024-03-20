@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.81"
-rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7"}
-rustpython-ast = { git = "https://github.com/RustPython/RustPython.git", rev = "b9ed63ed326e4ab9c97d808271ddc1d7ca05fda7", features = ["unparse"]}
+rustpython-parser = "0.3.0"
+rustpython-ast = { version = "0.3.0", features = ["unparse"] }

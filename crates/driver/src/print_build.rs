@@ -11,7 +11,6 @@ use crate::{
     to_directory, Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
-use ast::{Located, StmtKind};
 use bzl_gen_build_python_utilities::{ast_builder, PythonProgram};
 use bzl_gen_build_shared_types::{
     build_config::{SourceConfig, TargetNameStrategy, WriteMode},
@@ -21,6 +20,7 @@ use bzl_gen_build_shared_types::{
 use futures::{stream, StreamExt};
 use ignore::WalkBuilder;
 use rustpython_parser::ast;
+use ast::{Expr, Stmt};
 
 use futures::Future;
 use tokio::{io::AsyncWriteExt, sync::Semaphore};
@@ -42,8 +42,8 @@ struct TargetEntry {
 }
 
 impl TargetEntry {
-    pub fn emit_build_function_call(&self) -> Result<Located<StmtKind>> {
-        let mut kw_args: Vec<(Arc<String>, Located<ast::ExprKind>)> = Default::default();
+    pub fn emit_build_function_call(&self) -> Result<Stmt> {
+        let mut kw_args: Vec<(Arc<String>, Expr)> = Default::default();
 
         kw_args.push((
             Arc::new("name".to_string()),
@@ -99,10 +99,10 @@ enum SrcType {
     List(Vec<String>),
 }
 impl SrcType {
-    pub fn to_statement(&self) -> Located<ast::ExprKind> {
+    pub fn to_statement(&self) -> Expr {
         match self {
             SrcType::Glob { include, exclude } => {
-                let mut kw_args: Vec<(Arc<String>, Located<ast::ExprKind>)> = Default::default();
+                let mut kw_args: Vec<(Arc<String>, Expr)> = Default::default();
 
                 kw_args.push((
                     Arc::new("include".to_string()),
@@ -150,7 +150,7 @@ struct TargetEntries {
 
 impl TargetEntries {
     // Helper
-    fn load_statement(from: Arc<String>, methods: Vec<Arc<String>>) -> Located<StmtKind> {
+    fn load_statement(from: Arc<String>, methods: Vec<Arc<String>>) -> Stmt {
         let mut fn_args = Vec::default();
         fn_args.push(ast_builder::with_constant_str(from.as_ref().to_owned()));
         fn_args.extend(
@@ -179,7 +179,7 @@ impl TargetEntries {
     }
 
     pub fn to_ast(&self) -> Result<PythonProgram> {
-        let mut program: Vec<Located<StmtKind>> = Vec::default();
+        let mut program: Vec<Stmt> = Vec::default();
         let mut all_load_statements: HashMap<Arc<String>, Vec<Arc<String>>> = HashMap::default();
 
         for entry in self.entries.iter() {
