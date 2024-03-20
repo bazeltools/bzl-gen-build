@@ -1382,8 +1382,7 @@ dependencies = [
 [[package]]
 name = "rustpython-ast"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcf9438da3660e6b88bd659fdc0cd13bcff4b85c584026a48b800c75bf0f8d00"
+source = "git+https://github.com/bazeltools/rustpython-parser.git?rev=6f98c334d5ed709e6aa1a03ec1e20bd37859b867#6f98c334d5ed709e6aa1a03ec1e20bd37859b867"
 dependencies = [
  "is-macro",
  "malachite-bigint",
@@ -1395,8 +1394,7 @@ dependencies = [
 [[package]]
 name = "rustpython-literal"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5d470a3e68cd776bb7590363d75c72d94b51e917847721847ab505c98b9397a"
+source = "git+https://github.com/bazeltools/rustpython-parser.git?rev=6f98c334d5ed709e6aa1a03ec1e20bd37859b867#6f98c334d5ed709e6aa1a03ec1e20bd37859b867"
 dependencies = [
  "hexf-parse",
  "is-macro",
@@ -1408,8 +1406,7 @@ dependencies = [
 [[package]]
 name = "rustpython-parser"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9db993974ff12f33c5be8a801741463691502f85ead5c503277937c4077bd92a"
+source = "git+https://github.com/bazeltools/rustpython-parser.git?rev=6f98c334d5ed709e6aa1a03ec1e20bd37859b867#6f98c334d5ed709e6aa1a03ec1e20bd37859b867"
 dependencies = [
  "anyhow",
  "is-macro",
@@ -1432,8 +1429,7 @@ dependencies = [
 [[package]]
 name = "rustpython-parser-core"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9d560c6dd4dc774d4bbad48c770e074c178c4ed5f6fd0521fcdb639af21bdd"
+source = "git+https://github.com/bazeltools/rustpython-parser.git?rev=6f98c334d5ed709e6aa1a03ec1e20bd37859b867#6f98c334d5ed709e6aa1a03ec1e20bd37859b867"
 dependencies = [
  "is-macro",
  "memchr",
@@ -1443,8 +1439,7 @@ dependencies = [
 [[package]]
 name = "rustpython-parser-vendored"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ae3062d7fe5fe38073f3a1c7145ed9a04e15f6e4a596d642c7db2d5cd2b51b"
+source = "git+https://github.com/bazeltools/rustpython-parser.git?rev=6f98c334d5ed709e6aa1a03ec1e20bd37859b867#6f98c334d5ed709e6aa1a03ec1e20bd37859b867"
 dependencies = [
  "memchr",
  "once_cell",
@@ -1826,8 +1821,10 @@ checksum = "e5464a87b239f13a63a501f2701565754bae92d243d4bb7eb12f6d57d2269bf4"
 [[package]]
 name = "unicode_names2"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446c96c6dd42604779487f0a981060717156648c1706aa1f464677f03c6cc059"
+source = "git+https://github.com/youknowone/unicode_names2.git?rev=4ce16aa85cbcdd9cc830410f1a72ef9a235f2fde#4ce16aa85cbcdd9cc830410f1a72ef9a235f2fde"
+dependencies = [
+ "phf",
+]
 
 [[package]]
 name = "utf8parse"
