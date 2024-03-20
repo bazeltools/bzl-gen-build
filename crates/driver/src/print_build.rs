@@ -11,6 +11,7 @@ use crate::{
     to_directory, Opt, PrintBuildArgs,
 };
 use anyhow::{anyhow, Context, Result};
+use ast::{Expr, Stmt};
 use bzl_gen_build_python_utilities::{ast_builder, PythonProgram};
 use bzl_gen_build_shared_types::{
     build_config::{SourceConfig, TargetNameStrategy, WriteMode},
@@ -20,7 +21,6 @@ use bzl_gen_build_shared_types::{
 use futures::{stream, StreamExt};
 use ignore::WalkBuilder;
 use rustpython_parser::ast;
-use ast::{Expr, Stmt};
 
 use futures::Future;
 use tokio::{io::AsyncWriteExt, sync::Semaphore};

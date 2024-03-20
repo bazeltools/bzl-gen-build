@@ -1,5 +1,5 @@
-use rustpython_parser::ast;
 use ast::{text_size::TextRange, Expr, Stmt, TextSize};
+use rustpython_parser::ast;
 use std::sync::Arc;
 
 fn empty_range() -> TextRange {
@@ -46,13 +46,11 @@ pub fn gen_py_function_call(
 
     Expr::Call(ast::ExprCall {
         range: location,
-        func: Box::new(Expr::Name(
-            ast::ExprName {
-                range: location,
-                id: ast::Identifier::new(name.to_string()),
-                ctx: ast::ExprContext::Load,
-            },
-        )),
+        func: Box::new(Expr::Name(ast::ExprName {
+            range: location,
+            id: ast::Identifier::new(name.to_string()),
+            ctx: ast::ExprContext::Load,
+        })),
         args,
         keywords: kws,
     })

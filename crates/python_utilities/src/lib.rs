@@ -1,5 +1,5 @@
-use rustpython_parser::{Parse, ast};
 use ast::Stmt;
+use rustpython_parser::{ast, Parse};
 
 pub mod ast_builder;
 pub mod ast_printer;

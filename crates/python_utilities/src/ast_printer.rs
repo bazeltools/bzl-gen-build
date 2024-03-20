@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use rustpython_parser::ast;
 use ast::{Arguments, Stmt};
+use rustpython_parser::ast;
 
 use crate::PythonProgram;
 
@@ -80,8 +80,7 @@ fn emit_args<'a>(args: &'a Arguments, str_buffer: &mut WritingBuffer<'a>) {
 fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
     for stmt in body.iter() {
         match &stmt {
-            Stmt::Import(ast::StmtImport { range: _ , names: _ }) =>
-                todo!(),
+            Stmt::Import(ast::StmtImport { range: _, names: _ }) => todo!(),
             Stmt::FunctionDef(ast::StmtFunctionDef {
                 range: _,
                 name,
@@ -154,18 +153,12 @@ fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
                 str_buffer.finish_line()
             }
 
-            Stmt::Expr(ast::StmtExpr {
-                range: _,
-                value
-            }) => {
+            Stmt::Expr(ast::StmtExpr { range: _, value }) => {
                 str_buffer.push(Cow::Owned(format!("{}", value)));
                 str_buffer.finish_line()
             }
             _ => {
-                panic!(
-                    "Have not implemented how to print: {:?}",
-                    stmt
-                )
+                panic!("Have not implemented how to print: {:?}", stmt)
             }
         }
     }

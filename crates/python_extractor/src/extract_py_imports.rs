@@ -1,6 +1,6 @@
+use ast::Stmt;
 use bzl_gen_build_python_utilities::PythonProgram;
 use rustpython_parser::ast;
-use ast::Stmt;
 
 pub fn extract(program: &PythonProgram) -> Vec<String> {
     let mut buf = Vec::default();
@@ -34,7 +34,9 @@ fn extract_from_body(body: &Vec<Stmt>, buf: &mut Vec<String>) {
     for element in body.iter() {
         match element {
             Stmt::FunctionDef(ast::StmtFunctionDef { body, .. }) => extract_from_body(&body, buf),
-            Stmt::AsyncFunctionDef(ast::StmtAsyncFunctionDef { body, .. }) => extract_from_body(&body, buf),
+            Stmt::AsyncFunctionDef(ast::StmtAsyncFunctionDef { body, .. }) => {
+                extract_from_body(&body, buf)
+            }
             Stmt::ClassDef(ast::StmtClassDef { body, .. }) => extract_from_body(&body, buf),
             Stmt::For(ast::StmtFor { body, orelse, .. }) => {
                 extract_from_body(&body, buf);
@@ -70,15 +72,15 @@ fn extract_from_body(body: &Vec<Stmt>, buf: &mut Vec<String>) {
                     match &handler.as_except_handler() {
                         Some(ast::ExceptHandlerExceptHandler { body, .. }) => {
                             extract_from_body(&body, buf);
-                        },
-                        None => {},
+                        }
+                        None => {}
                     }
                 }
                 extract_from_body(&body, buf);
                 extract_from_body(&orelse, buf);
                 extract_from_body(&finalbody, buf);
             }
-            Stmt::Import(ast::StmtImport { names , .. }) => {
+            Stmt::Import(ast::StmtImport { names, .. }) => {
                 for nme in names.iter() {
                     buf.push(nme.name.to_string().clone());
                 }
