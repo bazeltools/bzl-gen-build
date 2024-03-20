@@ -1,59 +1,57 @@
-use ast::{Expr, Located, Location, StmtKind};
+use ast::{text_size::TextRange, Expr, Stmt, TextSize};
 use rustpython_parser::ast;
 use std::sync::Arc;
 
-pub fn with_location<T>(t: T) -> Located<T> {
-    let location = Location::new(1, 0);
-    Located::new(location, location, t)
+fn empty_range() -> TextRange {
+    TextRange::empty(TextSize::new(0))
 }
-pub fn with_constant_str(s: String) -> Located<ast::ExprKind> {
-    with_location({
-        ast::ExprKind::Constant {
-            value: ast::Constant::Str(s),
-            kind: None,
-        }
+
+pub fn with_constant_str(s: String) -> Expr {
+    Expr::Constant(ast::ExprConstant {
+        range: empty_range(),
+        value: ast::Constant::Str(s),
+        kind: None,
     })
 }
 
-pub fn as_py_list<U>(elements: Vec<Expr<U>>) -> Located<ast::ExprKind<U>> {
-    with_location({
-        ast::ExprKind::List {
-            elts: elements,
-            ctx: ast::ExprContext::Load,
-        }
+pub fn as_py_list(elements: Vec<Expr>) -> Expr {
+    Expr::List(ast::ExprList {
+        range: empty_range(),
+        elts: elements,
+        ctx: ast::ExprContext::Load,
     })
 }
 
-pub fn as_stmt_expr(u: Located<ast::ExprKind>) -> Located<StmtKind> {
-    with_location(StmtKind::Expr { value: Box::new(u) })
+pub fn as_stmt_expr(u: Expr) -> Stmt {
+    Stmt::Expr(ast::StmtExpr {
+        range: empty_range(),
+        value: Box::new(u),
+    })
 }
 
 pub fn gen_py_function_call(
     name: Arc<String>,
-    args: Vec<Located<ast::ExprKind>>,
-    kw_args: Vec<(Arc<String>, Located<ast::ExprKind>)>,
-) -> Located<ast::ExprKind> {
-    let location = Location::new(1, 0);
+    args: Vec<Expr>,
+    kw_args: Vec<(Arc<String>, Expr)>,
+) -> Expr {
+    let location = empty_range();
     let mut kws = Vec::default();
     for (k, v) in kw_args {
-        kws.push(with_location(ast::KeywordData {
-            arg: Some(k.as_ref().to_owned()),
-            value: Box::new(v),
-        }))
+        kws.push(ast::Keyword {
+            range: location,
+            arg: Some(ast::Identifier::new(k.to_string())),
+            value: v,
+        })
     }
 
-    with_location({
-        ast::ExprKind::Call {
-            func: Box::new(Expr::new(
-                location,
-                location,
-                ast::ExprKind::Name {
-                    id: name.as_ref().to_owned(),
-                    ctx: ast::ExprContext::Load,
-                },
-            )),
-            args,
-            keywords: kws,
-        }
+    Expr::Call(ast::ExprCall {
+        range: location,
+        func: Box::new(Expr::Name(ast::ExprName {
+            range: location,
+            id: ast::Identifier::new(name.to_string()),
+            ctx: ast::ExprContext::Load,
+        })),
+        args,
+        keywords: kws,
     })
 }
