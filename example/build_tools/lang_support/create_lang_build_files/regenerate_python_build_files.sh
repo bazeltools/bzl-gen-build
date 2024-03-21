@@ -14,7 +14,10 @@ GEN_FLAVOR=python
 source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/bzl_gen_build_common.sh"
 set -x
 
-bazel query '@pip//...' | grep '@pip' > $TMP_WORKING_STATE/external_targets
+bazel query '@pip//...' | grep "@pip.*:pkg" > $TMP_WORKING_STATE/external_targets
+
+bazel query 'kind("py", com/...)' > /dev/null
+cat $OUTPUT_BASE/command.log | grep '//' >> $TMP_WORKING_STATE/external_targets
 
 CACHE_KEY="$(generate_cache_key $TMP_WORKING_STATE/external_targets $REPO_ROOT/WORKSPACE $REPO_ROOT/requirements_lock_3_9.txt)"
 rm -rf $TMP_WORKING_STATE/external_files &> /dev/null || true
@@ -23,7 +26,7 @@ rm -rf $TMP_WORKING_STATE/external_files &> /dev/null || true
 # if [ ! -d $TMP_WORKING_STATE/external_files ]; then
     # log "cache wasn't ready or populated"
     bazel run build_tools/bazel_rules/wheel_scanner:py_build_commands -- $TMP_WORKING_STATE/external_targets $TMP_WORKING_STATE/external_targets_commands.sh
-    chmod +x ${TMP_WORKING_STATE}/external_targets_commands.sh
+    chmod +x "${TMP_WORKING_STATE}/external_targets_commands.sh"
     mkdir -p $TMP_WORKING_STATE/external_files
     if [[ -d $TOOLING_WORKING_DIRECTORY ]]; then
         BZL_GEN_BUILD_TOOLS_PATH=$TOOLING_WORKING_DIRECTORY ${TMP_WORKING_STATE}/external_targets_commands.sh

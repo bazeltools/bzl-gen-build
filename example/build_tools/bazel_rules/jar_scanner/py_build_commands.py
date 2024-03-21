@@ -21,12 +21,14 @@ echo -n "Running scan of 3rdparty files in batches, working on batch {output_idx
 START_BATCH=$(date +%s)
 
 set +e
+set -x
 bazel build {targets} \
   --aspects build_tools/bazel_rules/jar_scanner/rule.bzl%jar_scanner_aspect \
   --output_groups=+jar_scanner_out \
-  --override_repository=external_build_tooling_gen={bzl_gen_build_path} \
+  --override_repository=external_build_tooling_gen=${{BZL_GEN_BUILD_TOOLS_PATH}} \
   --show_result=1000000 2> /tmp/cmd_out
 RET=$?
+set +x
 if [ "$RET" != "0" ]; then
     cat /tmp/cmd_out
     exit $RET

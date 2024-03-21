@@ -23,12 +23,14 @@ START_BATCH=$(date +%s)
 
 
 set +e
+set -x
 bazel build {targets} \
   --aspects build_tools/bazel_rules/wheel_scanner/wheel_scanner.bzl%wheel_scanner_aspect \
   --output_groups=+wheel_scanner_out \
   --override_repository=external_build_tooling_gen=${{BZL_GEN_BUILD_TOOLS_PATH}} \
   --show_result=1000000 2> /tmp/cmd_out
 RET=$?
+set +x
 if [ "$RET" != "0" ]; then
     cat /tmp/cmd_out
     exit $RET
@@ -56,12 +58,15 @@ echo "...complete in $(($END_BATCH-$START_BATCH)) seconds"
 
 
 def __transform_target(t):
-    return "@%s//:pkg" % (t.lstrip("//external:"))
+    if t.startswith("//external:"):
+        return "@%s//:pkg" % (t.lstrip("//external:"))
+    else:
+        return t
 
 def write_command(file, output_idx, command_list):
     file.write(
         TEMPLATE.format(
-            targets=" ".join([t for t in command_list if t.endswith("pkg")]),
+            targets=" ".join([t for t in command_list]),
             output_idx=output_idx,
             target_count=len(command_list),
         )

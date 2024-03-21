@@ -1,5 +1,6 @@
+use ast::Stmt;
 use bzl_gen_build_python_utilities::PythonProgram;
-use rustpython_ast::{Located, StmtKind};
+use rustpython_parser::ast;
 
 pub fn extract(program: &PythonProgram) -> Vec<String> {
     let mut buf = Vec::default();
@@ -29,75 +30,72 @@ pub fn extract(program: &PythonProgram) -> Vec<String> {
     buf
 }
 
-fn extract_from_body(body: &Vec<Located<StmtKind>>, buf: &mut Vec<String>) {
+fn extract_from_body(body: &Vec<Stmt>, buf: &mut Vec<String>) {
     for element in body.iter() {
-        let element = &element.node;
         match element {
-            StmtKind::FunctionDef { body, .. } => extract_from_body(&body, buf),
-            StmtKind::AsyncFunctionDef { body, .. } => extract_from_body(&body, buf),
-            StmtKind::ClassDef {
-                name: _,
-                bases: _,
-                keywords: _,
-                body,
-                decorator_list: _,
-            } => extract_from_body(&body, buf),
-
-            StmtKind::For { body, orelse, .. } => {
+            Stmt::FunctionDef(ast::StmtFunctionDef { body, .. }) => extract_from_body(&body, buf),
+            Stmt::AsyncFunctionDef(ast::StmtAsyncFunctionDef { body, .. }) => {
+                extract_from_body(&body, buf)
+            }
+            Stmt::ClassDef(ast::StmtClassDef { body, .. }) => extract_from_body(&body, buf),
+            Stmt::For(ast::StmtFor { body, orelse, .. }) => {
                 extract_from_body(&body, buf);
                 extract_from_body(&orelse, buf);
             }
-            StmtKind::AsyncFor { body, orelse, .. } => {
+            Stmt::AsyncFor(ast::StmtAsyncFor { body, orelse, .. }) => {
                 extract_from_body(&body, buf);
                 extract_from_body(&orelse, buf);
             }
-            StmtKind::While { body, orelse, .. } => {
+            Stmt::While(ast::StmtWhile { body, orelse, .. }) => {
                 extract_from_body(&body, buf);
                 extract_from_body(&orelse, buf);
             }
-            StmtKind::If { body, orelse, .. } => {
+            Stmt::If(ast::StmtIf { body, orelse, .. }) => {
                 extract_from_body(&body, buf);
                 extract_from_body(&orelse, buf);
             }
-            StmtKind::With { body, .. } => extract_from_body(&body, buf),
-            StmtKind::AsyncWith { body, .. } => extract_from_body(&body, buf),
-            StmtKind::Match { cases, .. } => {
+            Stmt::With(ast::StmtWith { body, .. }) => extract_from_body(&body, buf),
+            Stmt::AsyncWith(ast::StmtAsyncWith { body, .. }) => extract_from_body(&body, buf),
+            Stmt::Match(ast::StmtMatch { cases, .. }) => {
                 for case in cases.iter() {
                     extract_from_body(&case.body, buf);
                 }
             }
-            StmtKind::Try {
+            Stmt::Try(ast::StmtTry {
+                range: _,
                 body,
                 handlers,
                 orelse,
                 finalbody,
-            } => {
+            }) => {
                 for handler in handlers.iter() {
-                    match &handler.node {
-                        rustpython_ast::ExcepthandlerKind::ExceptHandler { body, .. } => {
+                    match &handler.as_except_handler() {
+                        Some(ast::ExceptHandlerExceptHandler { body, .. }) => {
                             extract_from_body(&body, buf);
                         }
+                        None => {}
                     }
                 }
                 extract_from_body(&body, buf);
                 extract_from_body(&orelse, buf);
                 extract_from_body(&finalbody, buf);
             }
-            StmtKind::Import { names } => {
+            Stmt::Import(ast::StmtImport { names, .. }) => {
                 for nme in names.iter() {
-                    buf.push(nme.node.name.clone());
+                    buf.push(nme.name.to_string().clone());
                 }
             }
-            StmtKind::ImportFrom {
+            Stmt::ImportFrom(ast::StmtImportFrom {
                 module,
                 names,
                 level: _,
-            } => {
+                ..
+            }) => {
                 for nme in names.iter() {
                     if let Some(module) = module.as_ref() {
-                        buf.push(format!("{}.{}", module, nme.node.name));
+                        buf.push(format!("{}.{}", module, nme.name));
                     } else {
-                        buf.push(nme.node.name.clone());
+                        buf.push(nme.name.to_string().clone());
                     }
                 }
             }
