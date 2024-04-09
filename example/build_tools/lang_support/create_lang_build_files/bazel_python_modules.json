@@ -14,6 +14,15 @@
             "headers": [],
             "function_name": "py_test",
             "target_name_strategy": "source_file_stem"
+          },
+          "binary_application": {
+            "headers": [
+              {
+                "load_from": "//build_tools/lang_support/python:py_binary.bzl",
+                "load_value": "py_binary"
+              }
+            ],
+            "function_name": "py_binary"
           }
         },
         "main_roots": [

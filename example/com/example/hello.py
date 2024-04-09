@@ -6,6 +6,7 @@ FOO = [""]
 def some_data():
     return pd.DataFrame()
 
+# bzl_gen_build:binary_generate:bin
 def main():
     print("Hello World!")
 
