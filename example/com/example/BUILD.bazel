@@ -6,8 +6,8 @@ java_proto_library(name='aa_proto_java', deps=[':aa_proto'], visibility=['//visi
 py_proto_library(name='aa_proto_py', deps=[':aa_proto'], visibility=['//visibility:public'])
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 # ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+load('//build_tools/lang_support/python:py_binary.bzl', 'py_binary')
+py_binary(name='bin', entity_path='com/example/hello.py', owning_library=':hello', visibility=['//visibility:public'])
 py_library(name='hello', srcs=['hello.py'], deps=['@@//com/example:aa_proto_py', '@@rules_python~0.24.0~pip~pip_39_pandas//:pkg'], visibility=['//visibility:public'])
-# ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
-# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 py_test(name='hello_test', srcs=['hello_test.py'], deps=['//com/example:hello'], visibility=['//visibility:public'])
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash

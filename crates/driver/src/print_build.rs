@@ -205,6 +205,21 @@ impl TargetEntries {
 
         Ok(PythonProgram { body: program })
     }
+
+    fn combine(t1: TargetEntries, t2: TargetEntries) -> TargetEntries {
+        let mut entries: Vec<TargetEntry> = Vec::default();
+        let mut names: HashSet<String> = HashSet::default();
+        for entry in t1.entries {
+            names.insert(entry.name.clone());
+            entries.push(entry);
+        }
+        for entry in t2.entries {
+            if !names.contains(&entry.name) {
+                entries.push(entry);
+            }
+        }
+        TargetEntries { entries: entries }
+    }
 }
 
 async fn generate_targets<F, R>(
@@ -391,7 +406,7 @@ where
 
         let mut parent_include_src = Vec::default();
 
-        apply_binaries(&mut t, &graph_node.node_metadata, module_config, &element)?;
+        apply_binaries(&mut t, &graph_node.node_metadata, module_config, &target_name)?;
         apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
         apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
         // before we give extra_kv_pairs away to make the main target,
@@ -568,7 +583,7 @@ where
         target_entries: &mut TargetEntries,
         node_metadata: &GraphNodeMetadata,
         module_config: &ModuleConfig,
-        target_path: &str,
+        lib_target: &str,
     ) -> Result<()> {
         if !node_metadata.binary_refs.is_empty() {
             let build_config = match &module_config.build_config.binary_application {
@@ -599,7 +614,7 @@ where
                     k_strs.push(("binary_refs_value".to_string(), ep.to_string()));
                 }
 
-                k_strs.push(("owning_library".to_string(), format!("//{}", target_path)));
+                k_strs.push(("owning_library".to_string(), format!(":{}", lib_target.to_string())));
 
                 target_entries.entries.push(TargetEntry {
                     name: bin.binary_refs.binary_name.clone(),
@@ -771,7 +786,7 @@ async fn print_file(
     let target_folder = opt.working_directory.join(&element);
     let target_file = target_folder.join("BUILD.bazel");
     emitted_files.push(target_file.clone());
-    let t = generate_targets(
+    let t1 = generate_targets(
         opt,
         project_conf,
         SourceConfig::Main,
@@ -803,6 +818,7 @@ async fn print_file(
         },
     )
     .await?;
+    let t = TargetEntries::combine(t1, t2);
     let handle = concurrent_io_operations.acquire().await?;
     let write_mode = WriteMode::new(opt.append);
     match write_mode {
@@ -821,13 +837,6 @@ async fn print_file(
                         format!("Attempting to write file data to {:?}", target_file)
                     })?;
             }
-            if !t2.entries.is_empty() {
-                file.write(t2.emit_build_file()?.as_bytes())
-                    .await
-                    .with_context(|| {
-                        format!("Attempting to write file data to {:?}", target_file)
-                    })?;
-            }
         }
         WriteMode::Overwrite => {
             let mut file = tokio::fs::OpenOptions::new()
@@ -838,13 +847,6 @@ async fn print_file(
                 .await?;
             if !t.entries.is_empty() {
                 file.write_all(t.emit_build_file()?.as_bytes())
-                    .await
-                    .with_context(|| {
-                        format!("Attempting to write file data to {:?}", target_file)
-                    })?;
-            }
-            if !t2.entries.is_empty() {
-                file.write(t2.emit_build_file()?.as_bytes())
                     .await
                     .with_context(|| {
                         format!("Attempting to write file data to {:?}", target_file)
@@ -1224,15 +1226,31 @@ scala_tests(
         };
 
         let mut entries = Vec::default();
+        entries.push(make_target_entry("scala_extractor"));
+        let target_entries = TargetEntries { entries };
 
+        let generated_s = target_entries.emit_build_file().unwrap();
+
+        let parsed_from_generated_string =
+            PythonProgram::parse(generated_s.as_str(), "tmp.py").unwrap();
+
+        assert_eq!(
+            parsed_from_embed_string.to_string(),
+            parsed_from_generated_string.to_string(),
+            "\n\nExpected:\n{}\n\nGenerated:\n{}\n",
+            parsed_from_embed_string,
+            parsed_from_generated_string
+        );
+    }
+
+    fn make_target_entry(name: &str) -> TargetEntry {
         let mut required_load = HashMap::new();
         required_load.insert(
             Arc::new("//build_tools/lang_support/scala/test:scalatest.bzl".to_string()),
             vec![Arc::new("scala_tests".to_string())],
         );
-
-        entries.push(TargetEntry {
-            name: "scala_extractor".to_string(),
+        TargetEntry {
+            name: name.to_string(),
             extra_kv_pairs: vec![(
                 "deps".to_string(),
                 vec![
@@ -1249,21 +1267,31 @@ scala_tests(
             }),
             target_type: Arc::new("scala_tests".to_string()),
             extra_k_strs: Vec::default(),
-        });
+        }
+    }
 
-        let target_entries = TargetEntries { entries };
+    #[test]
+    fn test_combine() {
+        let mut e1 = Vec::default();
+        e1.push(make_target_entry("t1"));
+        let ts1 = TargetEntries { entries: e1 };
 
-        let generated_s = target_entries.emit_build_file().unwrap();
+        let mut e2 = Vec::default();
+        e2.push(make_target_entry("t2"));
+        let ts2 = TargetEntries { entries: e2 };
 
-        let parsed_from_generated_string =
-            PythonProgram::parse(generated_s.as_str(), "tmp.py").unwrap();
+        let mut e3 = Vec::default();
+        e3.push(make_target_entry("t1"));
+        let ts3 = TargetEntries { entries: e3 };
 
-        assert_eq!(
-            parsed_from_embed_string.to_string(),
-            parsed_from_generated_string.to_string(),
-            "\n\nExpected:\n{}\n\nGenerated:\n{}\n",
-            parsed_from_embed_string,
-            parsed_from_generated_string
-        );
+        let mut e4 = Vec::default();
+        e4.push(make_target_entry("t1"));
+        let ts4 = TargetEntries { entries: e4 };
+
+        let actual1 = TargetEntries::combine(ts1, ts2);
+        assert_eq!(actual1.entries.len(), 2);
+
+        let actual2 = TargetEntries::combine(ts3, ts4);
+        assert_eq!(actual2.entries.len(), 1);
     }
 }
