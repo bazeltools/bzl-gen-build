@@ -41,7 +41,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 8
+          java-version: 11
           cache: sbt
       - name: Prepare output
         run: ./.github/ci_scripts/prepare_output.sh bzl-gen-build-${{ matrix.platform }}.tgz staging-directory
