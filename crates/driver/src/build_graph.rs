@@ -294,7 +294,7 @@ impl GraphState {
                 let nxt_dir = parent_dir(cur_tst);
                 if nxt_dir == cur_tst {
                     return Err(anyhow::anyhow!(
-                        "We cannot find a parent dir for {},{:#?}",
+                        "We cannot find a parent dir for {},{:#?}. This likely means there is an import cycle",
                         nxt_dir,
                         str_vals,
                     ));
