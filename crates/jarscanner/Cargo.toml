@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 zip = "1.2.1"
-serde = { version = "1.0.200", features = ["derive"] }
+serde = { version = "1.0.201", features = ["derive"] }
 serde_json = "1.0.116"
 clap = { version = "4.5.4", features = ["derive"] }
 tempfile = "3.10.1"
