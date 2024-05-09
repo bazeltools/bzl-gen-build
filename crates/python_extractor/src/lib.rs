@@ -2,12 +2,13 @@ use anyhow::{Context, Result};
 use bzl_gen_build_python_utilities::PythonProgram;
 use bzl_gen_build_shared_types::api::extracted_data::{DataBlock, ExtractedData};
 use encoding_rs::*;
+use futures::future::join_all;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     io::{BufRead, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 mod extract_py_bzl_gen_build_commands;
@@ -71,7 +72,7 @@ lazy_static! {
     };
 }
 
-pub fn read_file_to_str(input_file: &PathBuf) -> Result<String, anyhow::Error> {
+pub fn read_file_to_str(input_file: &Path) -> Result<String, anyhow::Error> {
     let mut file = std::fs::File::open(input_file).with_context(|| {
         format!(
             "While attempting to open file: {:?
@@ -120,6 +121,65 @@ pub fn read_file_to_str(input_file: &PathBuf) -> Result<String, anyhow::Error> {
     }
 }
 
+async fn extract_file(
+    import_path_relative_from: &Option<String>,
+    working_directory: &Path,
+    relative_path: String,
+    disable_ref_generation: bool,
+) -> Result<DataBlock> {
+    let input_file = working_directory.join(&relative_path);
+    let mut refs: HashSet<String> = Default::default();
+    let mut defs: BTreeSet<String> = Default::default();
+    let mut bzl_gen_build_commands: HashSet<String> = Default::default();
+
+    let input_str = read_file_to_str(&input_file)?;
+
+    bzl_gen_build_commands.extend(extract_py_bzl_gen_build_commands::extract(&input_str));
+
+    let file_p = input_file.to_string_lossy();
+    if !disable_ref_generation {
+        let program = PythonProgram::parse(&input_str, &file_p).with_context(|| {
+            format!(
+                "Error while parsing file {:?
+  }",
+                input_file
+            )
+        })?;
+        refs.extend(extract_py_imports::extract(&program));
+    }
+
+    let expanded = if let Some(rel) = import_path_relative_from {
+        expand_path_to_defs_from_offset(rel, &file_p)
+    } else {
+        expand_path_to_defs(&relative_path, &file_p)
+    };
+    defs.extend(expanded);
+
+    Ok(DataBlock {
+        entity_path: relative_path,
+        defs,
+        refs,
+        bzl_gen_build_commands,
+    })
+}
+
+fn split_inputs(relative_input_paths: String) -> Result<Vec<String>> {
+    let mut relative_input_paths: Vec<String> =
+        if let Some(suffix) = relative_input_paths.strip_prefix('@') {
+            std::fs::read_to_string(PathBuf::from(suffix))?
+                .lines()
+                .map(|e| e.to_string())
+                .collect()
+        } else {
+            // TODO: I think the spec is actually that this should split on ,
+            vec![relative_input_paths]
+        };
+
+    relative_input_paths.sort();
+
+    Ok(relative_input_paths)
+}
+
 pub async fn extract_python(
     relative_input_paths: String,
     working_directory: PathBuf,
@@ -128,60 +188,23 @@ pub async fn extract_python(
     disable_ref_generation: bool,
     import_path_relative_from: Option<String>,
 ) -> Result<()> {
-    let mut relative_input_paths: Vec<String> =
-        if let Some(suffix) = relative_input_paths.strip_prefix('@') {
-            std::fs::read_to_string(PathBuf::from(suffix))?
-                .lines()
-                .map(|e| e.to_string())
-                .collect()
-        } else {
-            vec![relative_input_paths.clone()]
-        };
+    let relative_input_paths: Vec<String> = split_inputs(relative_input_paths)?;
+    let mut data_blocks: Vec<DataBlock> = Vec::with_capacity(relative_input_paths.len());
+    let all_loads = relative_input_paths.into_iter().map(|relative_path| {
+        extract_file(
+            &import_path_relative_from,
+            &working_directory,
+            relative_path,
+            disable_ref_generation,
+        )
+    });
 
-    relative_input_paths.sort();
-
-    let mut data_blocks: Vec<DataBlock> = Default::default();
-
-    for relative_path in relative_input_paths {
-        let input_file = working_directory.join(&relative_path);
-        let mut refs: HashSet<String> = Default::default();
-        let mut defs: BTreeSet<String> = Default::default();
-        let mut bzl_gen_build_commands: HashSet<String> = Default::default();
-
-        let input_str = read_file_to_str(&input_file)?;
-
-        bzl_gen_build_commands.extend(extract_py_bzl_gen_build_commands::extract(
-            input_str.as_str(),
-        ));
-
-        if !disable_ref_generation {
-            let program = PythonProgram::parse(&input_str, "foo.py").with_context(|| {
-                format!(
-                    "Error while parsing file {:?
-        }",
-                    input_file
-                )
-            })?;
-            refs.extend(extract_py_imports::extract(&program));
-        }
-
-        let file_p = input_file.to_string_lossy();
-
-        if let Some(rel) = import_path_relative_from.as_ref() {
-            defs.extend(expand_path_to_defs_from_offset(rel, file_p.as_ref()));
-        } else {
-            defs.extend(expand_path_to_defs(&relative_path, file_p.as_ref()));
-        }
-        data_blocks.push(DataBlock {
-            entity_path: relative_path,
-            defs,
-            refs,
-            bzl_gen_build_commands,
-        })
+    for data_block in join_all(all_loads).await {
+        data_blocks.push(data_block?);
     }
 
     let def_refs = ExtractedData {
-        label_or_repo_path: label_or_repo_path.clone(),
+        label_or_repo_path: label_or_repo_path,
         data_blocks,
     };
 

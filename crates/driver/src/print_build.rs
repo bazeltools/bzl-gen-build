@@ -406,7 +406,12 @@ where
 
         let mut parent_include_src = Vec::default();
 
-        apply_binaries(&mut t, &graph_node.node_metadata, module_config, &target_name)?;
+        apply_binaries(
+            &mut t,
+            &graph_node.node_metadata,
+            module_config,
+            &target_name,
+        )?;
         apply_manual_refs(&mut extra_kv_pairs, &graph_node.node_metadata);
         apply_attr_string_lists(&mut extra_kv_pairs, &graph_node.node_metadata);
         // before we give extra_kv_pairs away to make the main target,
@@ -610,11 +615,14 @@ where
                     k_strs.push(("entity_path".to_string(), ep.to_string()));
                 }
 
-                if let Some(ep) = &bin.binary_refs.target_value {
-                    k_strs.push(("binary_refs_value".to_string(), ep.to_string()));
+                if let Some(tv) = &bin.binary_refs.target_value {
+                    k_strs.push(("binary_refs_value".to_string(), tv.to_string()));
                 }
 
-                k_strs.push(("owning_library".to_string(), format!(":{}", lib_target.to_string())));
+                k_strs.push((
+                    "owning_library".to_string(),
+                    format!(":{}", lib_target),
+                ));
 
                 target_entries.entries.push(TargetEntry {
                     name: bin.binary_refs.binary_name.clone(),
