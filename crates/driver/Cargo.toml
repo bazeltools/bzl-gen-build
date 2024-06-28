@@ -21,7 +21,7 @@ globset = "0.4.14"
 rustpython-parser = { git = "https://github.com/bazeltools/rustpython-parser.git", rev = "6f98c334d5ed709e6aa1a03ec1e20bd37859b867" }
 rustpython-ast = { git = "https://github.com/bazeltools/rustpython-parser.git", rev = "6f98c334d5ed709e6aa1a03ec1e20bd37859b867", features = ["unparse"] }
 pretty_env_logger = "0.5.0"
-log = "0.4.21"
+log = "0.4.22"
 
 [dev-dependencies]
 tempfile = "3.10.1"
