@@ -15,7 +15,7 @@ impl ProtobufSource {
         let mut parser = Parser::new();
         let mut well_known_refs = Vec::default();
         let mut bzl_gen_build_commands = Vec::default();
-        parser.set_language(tree_sitter_proto::language())?;
+        parser.set_language(&tree_sitter_proto::language())?;
         let tree = match parser.parse(source, None) {
             Some(tree) => tree,
             None => bail!("parse failed"),

@@ -315,11 +315,12 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.79"
+version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
+checksum = "324c74f2155653c90b04f25b2a47a8a631360cb908f92a772695f430c7e31052"
 dependencies = [
  "jobserver",
+ "libc",
 ]
 
 [[package]]
@@ -912,9 +913,9 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 
 [[package]]
 name = "jobserver"
-version = "0.1.26"
+version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "936cfd212a0155903bcbc060e316fb6cc7cbf2e1907329391ebadc1fe0ce77c2"
+checksum = "d2b099aaa34a9751c5bf0878add70444e1ed2dd73f347be99003d4577277de6e"
 dependencies = [
  "libc",
 ]
@@ -1863,9 +1864,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
-version = "0.19.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad726ec26496bf4c083fff0f43d4eb3a2ad1bba305323af5ff91383c0b6ecac0"
+checksum = "df7cc499ceadd4dcdf7ec6d4cbc34ece92c3fa07821e287aedecd4416c516dca"
 dependencies = [
  "cc",
  "regex",
@@ -1874,7 +1875,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-proto"
 version = "0.0.1"
-source = "git+https://github.com/mitchellh/tree-sitter-proto.git?rev=42d82fa18f8afe59b5fc0b16c207ee4f84cb185f#42d82fa18f8afe59b5fc0b16c207ee4f84cb185f"
+source = "git+https://github.com/rewinfrey/tree-sitter-proto.git?rev=8a9aac7059e829d718b54dadfb778b736702ea29#8a9aac7059e829d718b54dadfb778b736702ea29"
 dependencies = [
  "cc",
  "tree-sitter",
