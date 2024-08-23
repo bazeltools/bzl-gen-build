@@ -206,13 +206,11 @@ impl CustomDisplay for ast::Expr {
             list: &Vec<ast::Expr>,
         ) -> String {
             str_buffer.push("[");
-            let mut idx: usize = 0;
-            for elem in list.iter() {
+            for (idx, elem) in list.iter().enumerate() {
                 elem.custom_fmt(str_buffer, defer);
                 if idx < list.len() - 1 {
                     str_buffer.push(", ");
                 }
-                idx += 1;
             }
             str_buffer.push("]");
             "".to_string()
@@ -247,16 +245,13 @@ impl CustomDisplay for ast::Expr {
                 let name = func_expr.custom_fmt(str_buffer, true);
                 if name == "load" {
                     str_buffer.push_cow(Cow::Owned(name)).push("(");
-                    let mut idx: usize = 0;
-                    for arg in args.iter() {
+                    for (idx, arg) in args.iter().enumerate() {
                         arg.custom_fmt(str_buffer, defer);
                         if idx < args.len() - 1 {
                             str_buffer.push(", ");
                         }
-                        idx += 1;
                     }
-                    idx = 0;
-                    for kw in keywords.iter() {
+                    for (idx, kw) in keywords.iter().enumerate() {
                         str_buffer.begin_keyword();
                         match &kw.arg {
                             Some(arg) => {
@@ -269,7 +264,6 @@ impl CustomDisplay for ast::Expr {
                             str_buffer.push(", ");
                         }
                         str_buffer.finish_keyword();
-                        idx += 1;
                     }
                     str_buffer.push(")");
                 } else {
