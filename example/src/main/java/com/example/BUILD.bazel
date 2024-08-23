@@ -1,4 +1,20 @@
 # ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
-filegroup(name='example_files', srcs=glob(include=['**/*.java']), visibility=['//visibility:public'])
-java_library(name='example', srcs=[':example_files'], deps=['@@//com/example:aa_proto_java', '@@_main~maven~maven//:org_slf4j_slf4j_api'], visibility=['//visibility:public'])
+
+filegroup(
+    name = "example_files",
+    srcs = glob(
+        include = ["**/*.java"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+java_library(
+    name = "example",
+    srcs = [":example_files"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@@//com/example:aa_proto_java",
+        "@@_main~maven~maven//:org_slf4j_slf4j_api",
+    ],
+)
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
