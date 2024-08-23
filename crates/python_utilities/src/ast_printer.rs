@@ -37,31 +37,40 @@ impl<'a> WritingBuffer<'a> {
         self
     }
 
-    pub fn push(&mut self, other: Cow<'a, str>) {
+    pub fn push(&mut self, other: &'a str) -> &mut Self {
+        self.push_cow(Cow::Borrowed(other))
+    }
+
+    pub fn push_cow(&mut self, other: Cow<'a, str>) -> &mut Self {
         if !self.in_line {
             self.buf.push(Cow::Borrowed("\n"));
+            let indent_str = Cow::Borrowed("    ");
             for _ in 0..self.indent {
-                self.buf.push(Cow::Borrowed("    "))
+                self.buf.push(indent_str.clone())
             }
         }
         self.in_line = true;
         self.buf.push(other);
+        self
     }
 
-    pub fn finish_line(&mut self) {
-        self.in_line = false
+    pub fn finish_line(&mut self) -> &mut Self {
+        self.in_line = false;
+        self
     }
 
     pub fn finish(self) -> String {
         self.buf.join("")
     }
 
-    pub fn begin_keyword(&mut self) {
-        self.in_keyword = true
+    pub fn begin_keyword(&mut self) -> &mut Self {
+        self.in_keyword = true;
+        self
     }
 
-    pub fn finish_keyword(&mut self) {
-        self.in_keyword = false
+    pub fn finish_keyword(&mut self) -> &mut Self {
+        self.in_keyword = false;
+        self
     }
 }
 
@@ -70,14 +79,14 @@ fn emit_args<'a>(args: &'a Arguments, str_buffer: &mut WritingBuffer<'a>) {
 
     for positional_arg in args.args.iter() {
         if !first_arg {
-            str_buffer.push(Cow::Borrowed(", "));
+            str_buffer.push(", ");
         }
         first_arg = false;
         let positional_arg = &positional_arg.def;
         if positional_arg.annotation.is_some() {
             panic!("Annotation printing not supported {:#?}", positional_arg);
         }
-        str_buffer.push(Cow::Borrowed(positional_arg.arg.as_str()));
+        str_buffer.push(positional_arg.arg.as_str());
     }
 
     if args.kwarg.is_some() {
@@ -107,17 +116,12 @@ fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
                         stmt
                     )
                 }
-                str_buffer.push(Cow::Borrowed("def "));
-                str_buffer.push(Cow::Borrowed(name.as_str()));
-                str_buffer.push(Cow::Borrowed("("));
+                str_buffer.push("def ").push(name.as_str()).push("(");
                 emit_args(args.as_ref(), str_buffer);
-                str_buffer.push(Cow::Borrowed("):"));
-                str_buffer.finish_line();
-                str_buffer.indent();
+                str_buffer.push("):").finish_line().indent();
 
                 emit_body(body, str_buffer);
-                str_buffer.deindent();
-                str_buffer.finish_line();
+                str_buffer.deindent().finish_line();
             }
 
             Stmt::ImportFrom(ast::StmtImportFrom {
@@ -136,22 +140,24 @@ fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
                     let module = module
                         .as_ref()
                         .expect("Should be able to get the module if we are importing names");
-                    str_buffer.push(Cow::Borrowed("from "));
-                    str_buffer.push(Cow::Borrowed(module.as_str()));
-                    str_buffer.push(Cow::Borrowed(" import "));
+                    str_buffer
+                        .push("from ")
+                        .push(module.as_str())
+                        .push(" import ");
 
                     let mut first = true;
                     for nme in names.iter() {
                         if !first {
-                            str_buffer.push(Cow::Borrowed(","));
+                            str_buffer.push(",");
                         }
                         first = false;
                         if let Some(as_name) = &nme.asname {
-                            str_buffer.push(Cow::Borrowed(nme.name.as_str()));
-                            str_buffer.push(Cow::Borrowed(" as "));
-                            str_buffer.push(Cow::Borrowed(as_name.as_str()));
+                            str_buffer
+                                .push(nme.name.as_str())
+                                .push(" as ")
+                                .push(as_name.as_str());
                         } else {
-                            str_buffer.push(Cow::Borrowed(nme.name.as_str()));
+                            str_buffer.push(nme.name.as_str());
                         }
                     }
                 }
@@ -159,14 +165,12 @@ fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
                 str_buffer.finish_line();
             }
             Stmt::Pass(ast::StmtPass { range: _ }) => {
-                str_buffer.push(Cow::Borrowed("pass"));
-                str_buffer.finish_line()
+                str_buffer.push("pass").finish_line();
             }
 
             Stmt::Expr(ast::StmtExpr { range: _, value }) => {
-                let expr: &ast::Expr = &*value;
-                CustomDisplay::custom_fmt(expr, str_buffer, false);
-                str_buffer.finish_line()
+                value.custom_fmt(str_buffer, false);
+                str_buffer.finish_line();
             }
             _ => {
                 panic!("Have not implemented how to print: {:?}", stmt)
@@ -177,7 +181,7 @@ fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
 
 /**
  * CustomDisplay represents a mutable pretty printing.
- * WritingBuffer keep track of the indentation state, so we can't just return string.
+ * WritingBuffer keeps track of the indentation state, so we can't just return string.
  * This allows, e.g. a nested list items to be double-indented.
  *
  * defer - When true, it does not push to str_buffer, and just returns the String value.
@@ -192,7 +196,7 @@ impl CustomDisplay for ast::Expr {
     fn custom_fmt(&self, str_buffer: &mut WritingBuffer, defer: bool) -> String {
         fn push(str_buffer: &mut WritingBuffer, defer: bool, s: String) -> String {
             if !defer {
-                str_buffer.push(Cow::Owned(s.clone()));
+                str_buffer.push_cow(Cow::Owned(s.clone()));
             }
             s
         }
@@ -201,16 +205,16 @@ impl CustomDisplay for ast::Expr {
             defer: bool,
             list: &Vec<ast::Expr>,
         ) -> String {
-            str_buffer.push(Cow::Owned("[".to_string()));
+            str_buffer.push("[");
             let mut idx: usize = 0;
             for elem in list.iter() {
                 elem.custom_fmt(str_buffer, defer);
                 if idx < list.len() - 1 {
-                    str_buffer.push(Cow::Owned(", ".to_string()))
+                    str_buffer.push(", ");
                 }
                 idx += 1;
             }
-            str_buffer.push(Cow::Owned("]".to_string()));
+            str_buffer.push("]");
             "".to_string()
         }
         fn push_multi_line_list(
@@ -218,16 +222,12 @@ impl CustomDisplay for ast::Expr {
             defer: bool,
             list: &Vec<ast::Expr>,
         ) -> String {
-            str_buffer.push(Cow::Owned("[".to_string()));
-            str_buffer.finish_line();
-            str_buffer.indent();
+            str_buffer.push("[").finish_line().indent();
             for elem in list.iter() {
                 elem.custom_fmt(str_buffer, defer);
-                str_buffer.push(Cow::Owned(",".to_string()));
-                str_buffer.finish_line();
+                str_buffer.push(",").finish_line();
             }
-            str_buffer.deindent();
-            str_buffer.push(Cow::Owned("]".to_string()));
+            str_buffer.deindent().push("]");
             "".to_string()
         }
 
@@ -246,13 +246,12 @@ impl CustomDisplay for ast::Expr {
                 let func_expr: &ast::Expr = &*func;
                 let name = func_expr.custom_fmt(str_buffer, true);
                 if name == "load" {
-                    str_buffer.push(Cow::Owned(name));
-                    str_buffer.push(Cow::Owned("(".to_string()));
+                    str_buffer.push_cow(Cow::Owned(name)).push("(");
                     let mut idx: usize = 0;
                     for arg in args.iter() {
                         arg.custom_fmt(str_buffer, defer);
                         if idx < args.len() - 1 {
-                            str_buffer.push(Cow::Owned(", ".to_string()))
+                            str_buffer.push(", ");
                         }
                         idx += 1;
                     }
@@ -261,47 +260,43 @@ impl CustomDisplay for ast::Expr {
                         str_buffer.begin_keyword();
                         match &kw.arg {
                             Some(arg) => {
-                                str_buffer.push(Cow::Owned(format!("{} = ", arg)));
+                                str_buffer.push_cow(Cow::Owned(format!("{} = ", arg)));
                             }
                             None => (),
                         };
                         kw.value.custom_fmt(str_buffer, defer);
                         if idx < keywords.len() - 1 {
-                            str_buffer.push(Cow::Owned(", ".to_string()))
+                            str_buffer.push(", ");
                         }
                         str_buffer.finish_keyword();
                         idx += 1;
                     }
-                    str_buffer.push(Cow::Owned(")".to_string()));
+                    str_buffer.push(")");
                 } else {
                     if !str_buffer.in_keyword {
-                        str_buffer.push(Cow::Owned("".to_string()));
-                        str_buffer.finish_line();
-                    } 
-                    str_buffer.push(Cow::Owned(name));
-                    str_buffer.push(Cow::Owned("(".to_string()));
-                    str_buffer.finish_line();
-                    str_buffer.indent();
+                        str_buffer.push("").finish_line();
+                    }
+                    str_buffer
+                        .push_cow(Cow::Owned(name))
+                        .push("(")
+                        .finish_line()
+                        .indent();
                     for arg in args.iter() {
                         arg.custom_fmt(str_buffer, defer);
-                        str_buffer.push(Cow::Owned(",".to_string()));
-                        str_buffer.finish_line();
+                        str_buffer.push(",").finish_line();
                     }
                     for kw in keywords.iter() {
                         str_buffer.begin_keyword();
                         match &kw.arg {
                             Some(arg) => {
-                                str_buffer.push(Cow::Owned(format!("{} = ", arg)));
+                                str_buffer.push_cow(Cow::Owned(format!("{} = ", arg)));
                             }
                             None => (),
                         };
                         kw.value.custom_fmt(str_buffer, defer);
-                        str_buffer.push(Cow::Owned(",".to_string()));
-                        str_buffer.finish_keyword();
-                        str_buffer.finish_line();
+                        str_buffer.push(",").finish_keyword().finish_line();
                     }
-                    str_buffer.deindent();
-                    str_buffer.push(Cow::Owned(")".to_string()));
+                    str_buffer.deindent().push(")");
                 }
                 "".to_string()
             }
