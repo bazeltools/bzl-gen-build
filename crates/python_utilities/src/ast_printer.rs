@@ -203,32 +203,65 @@ impl CustomDisplay for ast::Expr {
         fn push_inline_list(
             str_buffer: &mut WritingBuffer,
             defer: bool,
-            list: &Vec<ast::Expr>,
-        ) -> String {
-            str_buffer.push("[");
-            for (idx, elem) in list.iter().enumerate() {
-                elem.custom_fmt(str_buffer, defer);
-                if idx < list.len() - 1 {
+            begin_marker: &str,
+            args: &Vec<ast::Expr>,
+            keywords: &Vec<ast::Keyword>,
+            end_marker: &str,
+        ) {
+            str_buffer.push_cow(Cow::Owned(begin_marker.to_string()));
+            for (idx, arg) in args.iter().enumerate() {
+                arg.custom_fmt(str_buffer, defer);
+                if idx < args.len() - 1 {
                     str_buffer.push(", ");
                 }
             }
-            str_buffer.push("]");
-            "".to_string()
+            for (idx, kw) in keywords.iter().enumerate() {
+                str_buffer.begin_keyword();
+                match &kw.arg {
+                    Some(arg) => {
+                        str_buffer.push_cow(Cow::Owned(format!("{} = ", arg)));
+                    }
+                    None => (),
+                };
+                kw.value.custom_fmt(str_buffer, defer);
+                if idx < keywords.len() - 1 {
+                    str_buffer.push(", ");
+                }
+                str_buffer.finish_keyword();
+            }
+            str_buffer.push_cow(Cow::Owned(end_marker.to_string()));
         }
         fn push_multi_line_list(
             str_buffer: &mut WritingBuffer,
             defer: bool,
-            list: &Vec<ast::Expr>,
-        ) -> String {
-            str_buffer.push("[").finish_line().indent();
-            for elem in list.iter() {
-                elem.custom_fmt(str_buffer, defer);
+            begin_marker: &str,
+            args: &Vec<ast::Expr>,
+            keywords: &Vec<ast::Keyword>,
+            end_marker: &str,
+        ) {
+            str_buffer
+                .push_cow(Cow::Owned(begin_marker.to_string()))
+                .finish_line()
+                .indent();
+            for arg in args.iter() {
+                arg.custom_fmt(str_buffer, defer);
                 str_buffer.push(",").finish_line();
             }
-            str_buffer.deindent().push("]");
-            "".to_string()
+            for kw in keywords.iter() {
+                str_buffer.begin_keyword();
+                match &kw.arg {
+                    Some(arg) => {
+                        str_buffer.push_cow(Cow::Owned(format!("{} = ", arg)));
+                    }
+                    None => (),
+                };
+                kw.value.custom_fmt(str_buffer, defer);
+                str_buffer.push(",").finish_keyword().finish_line();
+            }
+            str_buffer
+                .deindent()
+                .push_cow(Cow::Owned(end_marker.to_string()));
         }
-
         match self {
             // This uses double-quotation for String literals
             ast::Expr::Constant(ast::ExprConstant { value, .. }) => match value {
@@ -244,62 +277,25 @@ impl CustomDisplay for ast::Expr {
                 let func_expr: &ast::Expr = &*func;
                 let name = func_expr.custom_fmt(str_buffer, true);
                 if name == "load" {
-                    str_buffer.push_cow(Cow::Owned(name)).push("(");
-                    for (idx, arg) in args.iter().enumerate() {
-                        arg.custom_fmt(str_buffer, defer);
-                        if idx < args.len() - 1 {
-                            str_buffer.push(", ");
-                        }
-                    }
-                    for (idx, kw) in keywords.iter().enumerate() {
-                        str_buffer.begin_keyword();
-                        match &kw.arg {
-                            Some(arg) => {
-                                str_buffer.push_cow(Cow::Owned(format!("{} = ", arg)));
-                            }
-                            None => (),
-                        };
-                        kw.value.custom_fmt(str_buffer, defer);
-                        if idx < keywords.len() - 1 {
-                            str_buffer.push(", ");
-                        }
-                        str_buffer.finish_keyword();
-                    }
-                    str_buffer.push(")");
+                    str_buffer.push_cow(Cow::Owned(name));
+                    push_inline_list(str_buffer, defer, "(", args, keywords, ")");
                 } else {
                     if !str_buffer.in_keyword {
                         str_buffer.push("").finish_line();
                     }
-                    str_buffer
-                        .push_cow(Cow::Owned(name))
-                        .push("(")
-                        .finish_line()
-                        .indent();
-                    for arg in args.iter() {
-                        arg.custom_fmt(str_buffer, defer);
-                        str_buffer.push(",").finish_line();
-                    }
-                    for kw in keywords.iter() {
-                        str_buffer.begin_keyword();
-                        match &kw.arg {
-                            Some(arg) => {
-                                str_buffer.push_cow(Cow::Owned(format!("{} = ", arg)));
-                            }
-                            None => (),
-                        };
-                        kw.value.custom_fmt(str_buffer, defer);
-                        str_buffer.push(",").finish_keyword().finish_line();
-                    }
-                    str_buffer.deindent().push(")");
+                    str_buffer.push_cow(Cow::Owned(name));
+                    push_multi_line_list(str_buffer, defer, "(", args, keywords, ")");
                 }
                 "".to_string()
             }
             ast::Expr::List(ast::ExprList { elts, .. }) => {
+                let kws: &Vec<ast::Keyword> = &vec![];
                 if elts.len() < 2 {
-                    push_inline_list(str_buffer, defer, elts)
+                    push_inline_list(str_buffer, defer, "[", elts, kws, "]")
                 } else {
-                    push_multi_line_list(str_buffer, defer, elts)
+                    push_multi_line_list(str_buffer, defer, "[", elts, kws, "]");
                 }
+                "".to_string()
             }
             _ => push(str_buffer, defer, format!("{}", self)),
         }
