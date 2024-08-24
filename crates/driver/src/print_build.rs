@@ -54,6 +54,17 @@ impl TargetEntry {
             kw_args.push((Arc::new("srcs".to_string()), srcs.to_statement()));
         }
 
+        let visibility = self
+            .visibility
+            .as_ref()
+            .map(|e| e.as_ref().as_str())
+            .unwrap_or("//visibility:public");
+
+        kw_args.push((
+            Arc::new("visibility".to_string()),
+            ast_builder::as_py_list(vec![ast_builder::with_constant_str(visibility.to_string())]),
+        ));
+
         for (k, v) in self.extra_kv_pairs.iter() {
             kw_args.push((
                 Arc::new(k.clone()),
@@ -71,17 +82,6 @@ impl TargetEntry {
                 ast_builder::with_constant_str(v.to_string()),
             ));
         }
-
-        let visibility = self
-            .visibility
-            .as_ref()
-            .map(|e| e.as_ref().as_str())
-            .unwrap_or("//visibility:public");
-
-        kw_args.push((
-            Arc::new("visibility".to_string()),
-            ast_builder::as_py_list(vec![ast_builder::with_constant_str(visibility.to_string())]),
-        ));
 
         Ok(ast_builder::as_stmt_expr(
             ast_builder::gen_py_function_call(self.target_type.clone(), Vec::default(), kw_args),
@@ -1137,35 +1137,35 @@ proto_library(
 
 java_proto_library(
     name='a_proto_java',
+    visibility=['//visibility:public'],
     deps=[':a_proto'],
-    visibility=['//visibility:public']
 )
 
 py_proto_library(
     name='a_proto_py',
     srcs=['a.proto'],
+    visibility=['//visibility:public'],
     deps=[],
-    visibility=['//visibility:public']
 )
 
 proto_library(
     name='b_proto',
     srcs=['b.proto'],
+    visibility=['//visibility:public'],
     deps=['//src/main/protos:a_proto'],
-    visibility=['//visibility:public']
 )
 
 java_proto_library(
     name='b_proto_java',
+    visibility=['//visibility:public'],
     deps=[':b_proto'],
-    visibility=['//visibility:public']
 )
 
 py_proto_library(
     name='b_proto_py',
     srcs=['b.proto'],
+    visibility=['//visibility:public'],
     deps=['//src/main/protos:a_proto_py'],
-    visibility=['//visibility:public']
 )
         "#,
             true,
@@ -1219,12 +1219,12 @@ py_proto_library(
 scala_tests(
     name = "scala_extractor",
     srcs = glob(include =  ["*.scala"]),
+    visibility = ["//visibility:public"],
     deps = [
         "//src/main/scala/com/example/scala_extractor",
         "@jvm__io_circe__circe_core//:jar",
         "@jvm__org_scalacheck__scalacheck//:jar",
     ],
-    visibility = ["//visibility:public"],
 )
         "#;
 
