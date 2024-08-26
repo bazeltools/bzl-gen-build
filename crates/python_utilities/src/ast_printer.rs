@@ -262,6 +262,20 @@ impl CustomDisplay for ast::Expr {
                 .deindent()
                 .push_cow(Cow::Owned(end_marker.to_string()));
         }
+        fn push_list(
+            str_buffer: &mut WritingBuffer,
+            defer: bool,
+            begin_marker: &str,
+            args: &Vec<ast::Expr>,
+            keywords: &Vec<ast::Keyword>,
+            end_marker: &str,
+        ) {
+            if args.len() + keywords.len() < 2 {
+                push_inline_list(str_buffer, defer, begin_marker, args, keywords, end_marker)
+            } else {
+                push_multi_line_list(str_buffer, defer, begin_marker, args, keywords, end_marker)
+            }
+        }
         match self {
             // This uses double-quotation for String literals
             ast::Expr::Constant(ast::ExprConstant { value, .. }) => match value {
@@ -284,17 +298,12 @@ impl CustomDisplay for ast::Expr {
                         str_buffer.push("").finish_line();
                     }
                     str_buffer.push_cow(Cow::Owned(name));
-                    push_multi_line_list(str_buffer, defer, "(", args, keywords, ")");
+                    push_list(str_buffer, defer, "(", args, keywords, ")")
                 }
                 "".to_string()
             }
             ast::Expr::List(ast::ExprList { elts, .. }) => {
-                let kws: &Vec<ast::Keyword> = &vec![];
-                if elts.len() < 2 {
-                    push_inline_list(str_buffer, defer, "[", elts, kws, "]")
-                } else {
-                    push_multi_line_list(str_buffer, defer, "[", elts, kws, "]");
-                }
+                push_list(str_buffer, defer, "[", elts, &vec![], "]");
                 "".to_string()
             }
             _ => push(str_buffer, defer, format!("{}", self)),
@@ -339,9 +348,7 @@ java_proto_library(
 
 filegroup(
     name = "example_files",
-    srcs = glob(
-        include = ["**/*.java"],
-    ),
+    srcs = glob(include = ["**/*.java"]),
     visibility = ["//visibility:public"],
 )"#,
         )
