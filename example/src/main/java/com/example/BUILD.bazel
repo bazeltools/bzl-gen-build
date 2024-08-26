@@ -2,9 +2,7 @@
 
 filegroup(
     name = "example_files",
-    srcs = glob(
-        include = ["**/*.java"],
-    ),
+    srcs = glob(include = ["**/*.java"]),
     visibility = ["//visibility:public"],
 )
 
