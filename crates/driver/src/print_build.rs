@@ -43,51 +43,52 @@ struct TargetEntry {
 
 impl TargetEntry {
     fn sort_like_buildifier<E>(kwargs: &mut Vec<(Arc<String>, E)>) {
-        // this is from: https://github.com/bazelbuild/buildtools/blob/be1c24cc9a44b4fd2410ec5356e4e21926dd206a/tables/tables.go#L177C34-L210C2
-        fn priority(key: &str) -> i32 {
-            match key {
-                "name" => -99,
-                "archive_override.module_name" => -99,
-                "git_override.module_name" => -99,
-                "local_path_override.module_name" => -99,
-                "multiple_version_override.module_name" => -99,
-                "single_version_override.module_name" => -99,
-                "bazel_dep.version" => -98,
-                "module.version" => -98,
-                "gwt_name" => -98,
-                "package_name" => -97,
-                "visible_node_name" => -96,
-                "size" => -95,
-                "timeout" => -94,
-                "testonly" => -93,
-                "src" => -92,
-                "srcdir" => -91,
-                "srcs" => -90,
-                "out" => -89,
-                "outs" => -88,
-                "hdrs" => -87,
-                "has_services" => -86,
-                "include" => -85,
-                "of" => -84,
-                "baseline" => -83,
+        lazy_static::lazy_static! {
+            static ref PRIORITY_MAP: HashMap<&'static str, i32> = {
+                let mut m = HashMap::new();
+                // this is from: https://github.com/bazelbuild/buildtools/blob/be1c24cc9a44b4fd2410ec5356e4e21926dd206a/tables/tables.go#L177C34-L210C2
+                m.insert("name", -99);
+                m.insert("archive_override.module_name", -99);
+                m.insert("git_override.module_name", -99);
+                m.insert("local_path_override.module_name", -99);
+                m.insert("multiple_version_override.module_name", -99);
+                m.insert("single_version_override.module_name", -99);
+                m.insert("bazel_dep.version", -98);
+                m.insert("module.version", -98);
+                m.insert("gwt_name", -98);
+                m.insert("package_name", -97);
+                m.insert("visible_node_name", -96);
+                m.insert("size", -95);
+                m.insert("timeout", -94);
+                m.insert("testonly", -93);
+                m.insert("src", -92);
+                m.insert("srcdir", -91);
+                m.insert("srcs", -90);
+                m.insert("out", -89);
+                m.insert("outs", -88);
+                m.insert("hdrs", -87);
+                m.insert("has_services", -86);
+                m.insert("include", -85);
+                m.insert("of", -84);
+                m.insert("baseline", -83);
                 // All others sort here, at 0.
-                "destdir" => 1,
-                "exports" => 2,
-                "runtime_deps" => 3,
-                "deps" => 4,
-                "implementation" => 5,
-                "implements" => 6,
-                "alwayslink" => 7,
-                _ => 0,
-            }
+                m.insert("destdir", 1);
+                m.insert("exports", 2);
+                m.insert("runtime_deps", 3);
+                m.insert("deps", 4);
+                m.insert("implementation", 5);
+                m.insert("implements", 6);
+                m.insert("alwayslink", 7);
+                m
+            };
         }
 
         kwargs.sort_by(|(a_key_arc, _), (b_key_arc, _)| {
             let a_key = a_key_arc.as_str();
             let b_key = b_key_arc.as_str();
 
-            let a_priority = priority(a_key);
-            let b_priority = priority(b_key);
+            let a_priority = *PRIORITY_MAP.get(a_key).unwrap_or(&0);
+            let b_priority = *PRIORITY_MAP.get(b_key).unwrap_or(&0);
 
             match a_priority.cmp(&b_priority) {
                 std::cmp::Ordering::Equal => a_key.cmp(b_key),
