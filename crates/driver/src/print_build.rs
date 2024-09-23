@@ -121,11 +121,6 @@ impl MaybeLabel {
           } => {
               let mut label = String::new();
 
-              if workspace.is_none() && package_name.is_empty() {
-                label.push(':');
-                label.push_str(&rule_name);
-                return label;
-              }
               // Handle workspace
               if let Some(ws) = workspace {
                   label.push('@');
