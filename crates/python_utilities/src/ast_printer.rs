@@ -3,15 +3,7 @@ use std::borrow::Cow;
 use ast::{Arguments, Stmt};
 use rustpython_parser::ast;
 
-use crate::PythonProgram;
-
-impl std::fmt::Display for PythonProgram {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", program_to_string(&self.body))
-    }
-}
-
-struct WritingBuffer<'a> {
+pub(crate) struct WritingBuffer<'a> {
     buf: Vec<Cow<'a, str>>,
     indent: usize,
     in_line: bool,
@@ -96,8 +88,8 @@ fn emit_args<'a>(args: &'a Arguments, str_buffer: &mut WritingBuffer<'a>) {
         panic!("kwonlyargs arg printing not supported {:#?}", args);
     }
 }
-fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
-    for stmt in body.iter() {
+pub(crate) fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
+    for stmt in body {
         match &stmt {
             Stmt::Import(ast::StmtImport { range: _, names: _ }) => todo!(),
             Stmt::FunctionDef(ast::StmtFunctionDef {
@@ -311,16 +303,8 @@ impl CustomDisplay for ast::Expr {
     }
 }
 
-fn program_to_string(program: &[Stmt]) -> String {
-    let mut write_buf = WritingBuffer::new();
-    emit_body(program, &mut write_buf);
-    write_buf.finish()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn round_trip_build_file() {
         assert_round_trip(
@@ -366,6 +350,8 @@ def cust_fn():
     }
 
     fn assert_round_trip(code: &str) {
+        use crate::PythonProgram;
+
         let parsed = PythonProgram::parse(code, "tmp.py").unwrap();
         let printed_parsed = format!("{}", parsed);
 

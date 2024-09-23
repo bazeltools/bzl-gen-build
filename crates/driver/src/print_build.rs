@@ -1,7 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-    sync::Arc,
+    cmp::Ordering, collections::{HashMap, HashSet}, path::{Path, PathBuf}, sync::Arc
 };
 
 use crate::{
@@ -28,6 +26,162 @@ use tokio::{io::AsyncWriteExt, sync::Semaphore};
 lazy_static::lazy_static! {
     static ref BUILD_BAZEL: std::ffi::OsString = std::ffi::OsString::from("BUILD.bazel");
     static ref BUILD_NO_EXT: std::ffi::OsString = std::ffi::OsString::from("BUILD");
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum MaybeLabel {
+    Label {
+        workspace: Option<String>,
+        package_name: Vec<String>,
+        rule_name: String,
+    },
+    Relative { rule_name: String },
+    // if we can't parse it into a valid label, treat it as a string
+    JustString(String)
+}
+
+impl MaybeLabel {
+    fn from_str(s: &str) -> MaybeLabel {
+        if !(s.contains(':') || s.contains('/') || s.contains('@')) {
+          return Self::JustString(s.to_string())
+        }
+
+        let workspace: Option<String>;
+        let rest: &str;
+
+        if s.starts_with(':') {
+          return MaybeLabel::Relative { rule_name: s[1..].to_string() };
+        } else if s.starts_with('@') {
+            let s1 = &s[1..];
+            if let Some(i) = s1.find("//") {
+                let workspace_part = &s1[..i];
+                rest = &s1[i + 2..]; // Skip the '//'
+                workspace = Some(workspace_part.to_owned());
+            } else {
+                // Invalid label, return JustString
+                return MaybeLabel::JustString(s.to_owned());
+            }
+        } else if s.starts_with("//") {
+            workspace = None;
+            rest = &s[2..]; // Skip the '//'
+        } else {
+            // simple string
+            return MaybeLabel::JustString(s.to_owned());
+        }
+
+        // Split rest into package and rule name
+        let (package_part, rule_name) = if let Some(i) = rest.rfind(':') {
+            let package_part = &rest[..i];
+            let rule_part = &rest[i + 1..];
+            if rule_part.is_empty() {
+                // Invalid label, empty rule name
+                return MaybeLabel::JustString(s.to_owned());
+            }
+            (package_part, rule_part)
+        } else {
+            // No colon, rule name is the last component of package_part
+            let package_part = rest;
+            if package_part.is_empty() {
+                // Invalid label, empty package
+                return MaybeLabel::JustString(s.to_owned());
+            }
+            let rule_name;
+            if let Some(last_slash) = package_part.rfind('/') {
+                rule_name = &package_part[last_slash + 1..];
+            } else {
+                rule_name = package_part;
+            }
+            if rule_name.is_empty() {
+                // Invalid label, empty rule name
+                return MaybeLabel::JustString(s.to_owned());
+            }
+            (package_part, rule_name)
+        };
+
+        // Split package_part into components
+        let package_name: Vec<String> = package_part
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_owned())
+            .collect();
+
+        MaybeLabel::Label {
+            workspace,
+            package_name,
+            rule_name: rule_name.to_owned(),
+        }
+    }
+
+    fn to_string(self) -> String {
+      match self {
+          MaybeLabel::Label {
+              workspace,
+              package_name,
+              rule_name,
+          } => {
+              let mut label = String::new();
+
+              // Handle workspace
+              if let Some(ws) = workspace {
+                  label.push('@');
+                  label.push_str(&ws);
+              }
+
+              label.push_str("//");
+
+              // Join package_name components with '/'
+              let package_str = package_name.join("/");
+
+              label.push_str(&package_str);
+
+              let last_package_component = package_name.last();
+
+              // Decide whether to include the rule_name
+              if Some(&rule_name) != last_package_component || package_name.is_empty() {
+                  // Include the colon and rule_name
+                  label.push(':');
+                  label.push_str(&rule_name);
+              }
+
+              label
+          }
+          MaybeLabel::JustString(s) => s,
+          MaybeLabel::Relative { rule_name } => format!(":{}", rule_name),
+      }
+    }
+
+    fn to_expr(self) -> Expr {
+      ast_builder::with_constant_str(self.to_string())
+    }
+}
+
+impl Ord for MaybeLabel {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (MaybeLabel::Label { workspace, package_name, rule_name }, MaybeLabel::Label { workspace: w1, package_name: p1, rule_name: r1 }) =>
+              (workspace, package_name, rule_name).cmp(&(w1, p1, r1))
+            ,
+            (MaybeLabel::Label { .. }, MaybeLabel::JustString(_)) =>
+              Ordering::Greater,
+            (MaybeLabel::Label { workspace: _, package_name: _, rule_name: _ }, MaybeLabel::Relative { .. }) =>
+              Ordering::Greater,
+            (MaybeLabel::JustString(_), MaybeLabel::Label { .. }) =>
+              Ordering::Less,
+            (MaybeLabel::JustString(s), MaybeLabel::Relative { rule_name }) =>
+              s.cmp(rule_name),
+            (MaybeLabel::JustString(a), MaybeLabel::JustString(b)) => a.cmp(b),
+            (MaybeLabel::Relative { .. }, MaybeLabel::Label { .. }) => Ordering::Less,
+            (MaybeLabel::Relative { rule_name }, MaybeLabel::JustString(s)) => rule_name.cmp(s),
+            (MaybeLabel::Relative { rule_name }, MaybeLabel::Relative { rule_name: r1 }) => rule_name.cmp(r1),
+
+        }
+    }
+}
+
+impl PartialOrd for MaybeLabel {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Debug)]
@@ -117,15 +271,20 @@ impl TargetEntry {
 
         kw_args.push((
             Arc::new("visibility".to_string()),
-            ast_builder::as_py_list(vec![ast_builder::with_constant_str(visibility.to_string())]),
+            ast_builder::as_py_list(
+              vec![MaybeLabel::from_str(visibility).to_expr()]
+            )
         ));
 
-        for (k, v) in self.extra_kv_pairs.iter() {
+        for (k, v) in &self.extra_kv_pairs {
+            let mut normv: Vec<MaybeLabel> = v.iter().map(|item| MaybeLabel::from_str(item)).collect();
+            normv.sort();
+
             kw_args.push((
                 Arc::new(k.clone()),
                 ast_builder::as_py_list(
-                    v.iter()
-                        .map(|d| ast_builder::with_constant_str(d.to_string()))
+                    normv.into_iter()
+                        .map(|d| d.to_expr())
                         .collect(),
                 ),
             ));
@@ -134,7 +293,7 @@ impl TargetEntry {
         for (k, v) in &self.extra_k_strs {
             kw_args.push((
                 Arc::new(k.clone()),
-                ast_builder::with_constant_str(v.to_string()),
+                MaybeLabel::from_str(v).to_expr(),
             ));
         }
 
@@ -1356,5 +1515,164 @@ scala_tests(
 
         let actual2 = TargetEntries::combine(ts3, ts4);
         assert_eq!(actual2.entries.len(), 1);
+    }
+
+    #[test]
+    fn test_maybe_label_from_str() {
+        let test_cases = vec![
+            (
+                "@//foo:bar",
+                MaybeLabel::Label {
+                    workspace: Some("".to_owned()),
+                    package_name: vec!["foo".to_owned()],
+                    rule_name: "bar".to_owned(),
+                },
+            ),
+            (
+                "@baz//foo:bar",
+                MaybeLabel::Label {
+                    workspace: Some("baz".to_owned()),
+                    package_name: vec!["foo".to_owned()],
+                    rule_name: "bar".to_owned(),
+                },
+            ),
+            (
+                "//foo:bar",
+                MaybeLabel::Label {
+                    workspace: None,
+                    package_name: vec!["foo".to_owned()],
+                    rule_name: "bar".to_owned(),
+                },
+            ),
+            (
+                "//foo/quux",
+                MaybeLabel::Label {
+                    workspace: None,
+                    package_name: vec!["foo".to_owned(), "quux".to_owned()],
+                    rule_name: "quux".to_owned(),
+                },
+            ),
+            (
+                "simple_string",
+                MaybeLabel::JustString("simple_string".to_owned()),
+            ),
+            // Additional test cases to ensure robustness
+            (
+                "@//:empty_package",
+                MaybeLabel::Label {
+                    workspace: Some("".to_owned()),
+                    package_name: vec![],
+                    rule_name: "empty_package".to_owned(),
+                },
+            ),
+            (
+                ":empty_package",
+                MaybeLabel::Relative {
+                    rule_name: "empty_package".to_owned(),
+                },
+            ),
+            (
+                "//:root_rule",
+                MaybeLabel::Label {
+                    workspace: None,
+                    package_name: vec![],
+                    rule_name: "root_rule".to_owned(),
+                },
+            ),
+            (
+                "@workspace//nested/package:rule",
+                MaybeLabel::Label {
+                    workspace: Some("workspace".to_owned()),
+                    package_name: vec!["nested".to_owned(), "package".to_owned()],
+                    rule_name: "rule".to_owned(),
+                },
+            ),
+            (
+                "//foo/bar/baz:qux",
+                MaybeLabel::Label {
+                    workspace: None,
+                    package_name: vec!["foo".to_owned(), "bar".to_owned(), "baz".to_owned()],
+                    rule_name: "qux".to_owned(),
+                },
+            ),
+            // Invalid label should return JustString
+            (
+                "@invalid_label_without_slash",
+                MaybeLabel::JustString("@invalid_label_without_slash".to_owned()),
+            ),
+            (
+                "@//missing_rule_name:",
+                MaybeLabel::JustString("@//missing_rule_name:".to_owned()),
+            ),
+            (
+                "//",
+                MaybeLabel::JustString("//".to_owned()),
+            ),
+        ];
+
+        for (input, expected) in test_cases {
+            let result = MaybeLabel::from_str(input);
+            assert_eq!(
+                result, expected,
+                "Test failed for input: '{}'\nExpected: {:?}\nGot: {:?}",
+                input, expected, result
+            );
+        }
+    }
+    #[test]
+    fn test_maybe_label_to_string() {
+        let test_cases = vec![
+            (
+                MaybeLabel::Label {
+                    workspace: Some("".to_owned()),
+                    package_name: vec!["foo".to_owned()],
+                    rule_name: "bar".to_owned(),
+                },
+                "@//foo:bar",
+            ),
+            (
+                MaybeLabel::Label {
+                    workspace: Some("baz".to_owned()),
+                    package_name: vec!["foo".to_owned()],
+                    rule_name: "bar".to_owned(),
+                },
+                "@baz//foo:bar",
+            ),
+            (
+                MaybeLabel::Label {
+                    workspace: None,
+                    package_name: vec!["foo".to_owned()],
+                    rule_name: "bar".to_owned(),
+                },
+                "//foo:bar",
+            ),
+            (
+                MaybeLabel::Label {
+                    workspace: None,
+                    package_name: vec!["foo".to_owned(), "quux".to_owned()],
+                    rule_name: "quux".to_owned(),
+                },
+                "//foo/quux",
+            ),
+            (
+                MaybeLabel::Relative {
+                    rule_name: "root_rule".to_owned(),
+                },
+                ":root_rule",
+            ),
+            (
+                MaybeLabel::JustString("simple_string".to_owned()),
+                "simple_string",
+            ),
+        ];
+
+        for (input, expected) in test_cases {
+            let result = input.clone().to_string();
+            assert_eq!(
+                result, expected,
+                "Test failed for input: {:?}\nExpected: {}\nGot: {}",
+                input, expected, result
+            );
+        }
     }
 }
