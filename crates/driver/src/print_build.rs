@@ -384,13 +384,9 @@ impl TargetEntries {
 
     pub fn emit_build_file(&self) -> Result<String> {
         let program = self.to_ast()?;
-        // we add the extra space at the end but not the beginning
-        // because PythonProgram already adds an extra space at the beginning
-        // and we need the extra spaces to match buildifier
         Ok(format!(
             "# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 {}
-
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 ",
             &program

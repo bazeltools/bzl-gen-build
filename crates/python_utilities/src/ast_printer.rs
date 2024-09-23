@@ -89,7 +89,7 @@ fn emit_args<'a>(args: &'a Arguments, str_buffer: &mut WritingBuffer<'a>) {
     }
 }
 pub(crate) fn emit_body<'a>(body: &'a [Stmt], str_buffer: &mut WritingBuffer<'a>) {
-    for stmt in body.iter() {
+    for stmt in body {
         match &stmt {
             Stmt::Import(ast::StmtImport { range: _, names: _ }) => todo!(),
             Stmt::FunctionDef(ast::StmtFunctionDef {
