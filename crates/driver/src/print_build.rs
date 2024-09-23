@@ -42,6 +42,61 @@ struct TargetEntry {
 }
 
 impl TargetEntry {
+    fn sort_like_buildifier<E>(kwargs: &mut Vec<(Arc<String>, E)>) {
+        lazy_static::lazy_static! {
+            static ref PRIORITY_MAP: HashMap<&'static str, i32> = {
+                let mut m = HashMap::new();
+                // this is from: https://github.com/bazelbuild/buildtools/blob/be1c24cc9a44b4fd2410ec5356e4e21926dd206a/tables/tables.go#L177C34-L210C2
+                m.insert("name", -99);
+                m.insert("archive_override.module_name", -99);
+                m.insert("git_override.module_name", -99);
+                m.insert("local_path_override.module_name", -99);
+                m.insert("multiple_version_override.module_name", -99);
+                m.insert("single_version_override.module_name", -99);
+                m.insert("bazel_dep.version", -98);
+                m.insert("module.version", -98);
+                m.insert("gwt_name", -98);
+                m.insert("package_name", -97);
+                m.insert("visible_node_name", -96);
+                m.insert("size", -95);
+                m.insert("timeout", -94);
+                m.insert("testonly", -93);
+                m.insert("src", -92);
+                m.insert("srcdir", -91);
+                m.insert("srcs", -90);
+                m.insert("out", -89);
+                m.insert("outs", -88);
+                m.insert("hdrs", -87);
+                m.insert("has_services", -86);
+                m.insert("include", -85);
+                m.insert("of", -84);
+                m.insert("baseline", -83);
+                // All others sort here, at 0.
+                m.insert("destdir", 1);
+                m.insert("exports", 2);
+                m.insert("runtime_deps", 3);
+                m.insert("deps", 4);
+                m.insert("implementation", 5);
+                m.insert("implements", 6);
+                m.insert("alwayslink", 7);
+                m
+            };
+        }
+
+        kwargs.sort_by(|(a_key_arc, _), (b_key_arc, _)| {
+            let a_key = a_key_arc.as_str();
+            let b_key = b_key_arc.as_str();
+
+            let a_priority = *PRIORITY_MAP.get(a_key).unwrap_or(&0);
+            let b_priority = *PRIORITY_MAP.get(b_key).unwrap_or(&0);
+
+            match a_priority.cmp(&b_priority) {
+                std::cmp::Ordering::Equal => a_key.cmp(b_key),
+                other => other,
+            }
+        });
+    }
+
     pub fn emit_build_function_call(&self) -> Result<Stmt> {
         let mut kw_args: Vec<(Arc<String>, Expr)> = Default::default();
 
@@ -76,13 +131,14 @@ impl TargetEntry {
             ));
         }
 
-        for (k, v) in self.extra_k_strs.iter() {
+        for (k, v) in &self.extra_k_strs {
             kw_args.push((
                 Arc::new(k.clone()),
                 ast_builder::with_constant_str(v.to_string()),
             ));
         }
 
+        Self::sort_like_buildifier(&mut kw_args);
         Ok(ast_builder::as_stmt_expr(
             ast_builder::gen_py_function_call(self.target_type.clone(), Vec::default(), kw_args),
         ))
@@ -226,7 +282,7 @@ async fn generate_targets<F, R>(
     opt: &'static Opt,
     project_conf: &'static ProjectConf,
     source_conf: SourceConfig,
-    graph_nodes: Vec<GraphNode>,
+    graph_nodes: &Vec<GraphNode>,
     element: &String,
     emitted_files: &mut Vec<PathBuf>,
     on_child: F,
@@ -338,7 +394,7 @@ where
         );
 
         for (k, lst) in build_config.extra_key_to_list.iter() {
-            append_key_values(&mut extra_kv_pairs, &k, &lst);
+            append_key_values(&mut extra_kv_pairs, k.clone(), &lst);
         }
 
         for directive in project_conf
@@ -373,7 +429,7 @@ where
                             Directive::AttrStringList(attr) => {
                                 append_key_values(
                                     &mut extra_kv_pairs,
-                                    &attr.attr_name,
+                                    attr.attr_name.clone(),
                                     &attr.values,
                                 );
                             }
@@ -499,7 +555,7 @@ where
                         entries: vec![filegroup_target],
                     };
 
-                    for metadata in metadatas.iter() {
+                    for metadata in metadatas {
                         apply_manual_refs(&mut extra_kv_pairs, metadata);
                         apply_attr_string_lists(&mut extra_kv_pairs, metadata);
                         apply_binaries(&mut t, metadata, module_config, &directory)?;
@@ -547,17 +603,17 @@ where
 
     fn to_label(
         opt: &'static Opt,
-        entry: &String,
+        entry: &str,
         target_name_strategy: TargetNameStrategy,
     ) -> String {
         if entry.starts_with('@') {
-            entry.clone()
+            entry.to_string()
         } else {
             if !opt.no_aggregate_source {
                 format!("//{}", entry)
             } else {
                 let directory = to_directory(entry.to_string());
-                let full_file = opt.working_directory.join(&entry);
+                let full_file = opt.working_directory.join(entry);
                 let file_name = to_file_name(&full_file);
                 // Result<String> fails only if the file_name fails to get a file stem, so it's not likely
                 let name =
@@ -568,7 +624,7 @@ where
     }
 
     fn to_name_from_file_name(
-        file_name: &String,
+        file_name: &str,
         target_name_strategy: TargetNameStrategy,
     ) -> Result<String> {
         match target_name_strategy {
@@ -580,7 +636,7 @@ where
         }
     }
 
-    fn to_file_name(path: &PathBuf) -> String {
+    fn to_file_name(path: &Path) -> String {
         path.file_name().unwrap().to_str().unwrap().to_string()
     }
 
@@ -668,11 +724,11 @@ where
 
     fn append_key_values(
         extra_kv_pairs: &mut HashMap<String, Vec<String>>,
-        key: &String,
+        key: String,
         values: &Vec<String>,
     ) {
         extra_kv_pairs
-            .entry(key.clone())
+            .entry(key)
             .or_default()
             .extend(values.iter().cloned());
     }
@@ -682,7 +738,7 @@ where
         node_metadata: &GraphNodeMetadata,
     ) {
         for attr in node_metadata.attr_string_lists.iter() {
-            append_key_values(extra_kv_pairs, &attr.attr_name, &attr.values);
+            append_key_values(extra_kv_pairs, attr.attr_name.clone(), &attr.values);
         }
     }
 
@@ -704,7 +760,7 @@ where
                 );
             }
             let mut extra_kv_pairs: HashMap<String, Vec<String>> = HashMap::default();
-            for (k, lst) in build_config.extra_key_to_list.iter() {
+            for (k, lst) in &build_config.extra_key_to_list {
                 let vs = lst
                     .iter()
                     .flat_map(|v| {
@@ -713,7 +769,7 @@ where
                     .collect::<Vec<_>>();
                 match k.as_str() {
                     "srcs" => srcs = Some(SrcType::List(vs)),
-                    _ => append_key_values(&mut extra_kv_pairs, &k, &vs),
+                    _ => append_key_values(&mut extra_kv_pairs, k.clone(), &vs),
                 }
             }
             target_entries.entries.push(TargetEntry {
@@ -786,10 +842,11 @@ where
 async fn print_file(
     opt: &'static Opt,
     project_conf: &'static ProjectConf,
-    graph_nodes: Vec<GraphNode>,
+    mut graph_nodes: Vec<GraphNode>,
     concurrent_io_operations: &'static Semaphore,
     element: String,
 ) -> Result<Vec<PathBuf>> {
+    graph_nodes.sort_by(|a, b| a.node_label.cmp(&b.node_label));
     let mut emitted_files: Vec<PathBuf> = Vec::default();
     let target_folder = opt.working_directory.join(&element);
     let target_file = target_folder.join("BUILD.bazel");
@@ -798,12 +855,12 @@ async fn print_file(
         opt,
         project_conf,
         SourceConfig::Main,
-        graph_nodes.clone(),
+        &graph_nodes,
         &element,
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
-            tokio::fs::write(&sub_target.clone(), t.emit_build_file()?)
+            tokio::fs::write(sub_target.clone(), t.emit_build_file()?)
                 .await
                 .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             Ok(0)
@@ -814,12 +871,12 @@ async fn print_file(
         opt,
         project_conf,
         SourceConfig::Test,
-        graph_nodes.clone(),
+        &graph_nodes,
         &element,
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
-            tokio::fs::write(&sub_target.clone(), t.emit_build_file()?)
+            tokio::fs::write(sub_target.clone(), t.emit_build_file()?)
                 .await
                 .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             Ok(0)
@@ -927,7 +984,6 @@ pub async fn print_build(
         .into_iter()
         .filter(|(k, _v)| !k.starts_with('@'))
     {
-        let graph_node = graph_node.clone();
         let element = if !opt.no_aggregate_source {
             entry
         } else {
@@ -935,7 +991,6 @@ pub async fn print_build(
         };
         let v = graph_nodes.entry(element).or_default();
         v.push(graph_node);
-        v.sort_by(|a, b| a.node_label.cmp(&b.node_label))
     }
 
     let mut res = Vec::default();
@@ -1190,7 +1245,7 @@ py_proto_library(
             opt,
             boxed_project_conf,
             SourceConfig::Main,
-            build_graph,
+            &build_graph,
             &element,
             &mut emitted_files,
             |_sub_target: PathBuf, _t: TargetEntries| async move { Ok(0) },

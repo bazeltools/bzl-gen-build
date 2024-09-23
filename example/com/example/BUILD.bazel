@@ -25,9 +25,9 @@ load("//build_tools/lang_support/python:py_binary.bzl", "py_binary")
 
 py_binary(
     name = "bin",
-    visibility = ["//visibility:public"],
     entity_path = "com/example/hello.py",
     owning_library = ":hello",
+    visibility = ["//visibility:public"],
 )
 
 py_library(
