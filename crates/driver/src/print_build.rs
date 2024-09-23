@@ -225,8 +225,10 @@ impl TargetEntries {
 
     pub fn emit_build_file(&self) -> Result<String> {
         let program = self.to_ast()?;
+        // buildifier puts a space after a comment before a function call
         Ok(format!(
             "# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+
 {}
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 ",
