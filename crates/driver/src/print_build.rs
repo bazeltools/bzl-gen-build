@@ -277,6 +277,9 @@ impl TargetEntry {
         ));
 
         for (k, v) in &self.extra_kv_pairs {
+            if k == "srcs" {
+              return Err(anyhow!("srcs cannot appear in extra_kv_pairs in: {}", self.name))
+            }
             let mut normv: Vec<MaybeLabel> = v.iter().map(|item| MaybeLabel::from_str(item)).collect();
             normv.sort();
 
@@ -348,12 +351,17 @@ impl SrcType {
                 )
             }
 
-            SrcType::List(files) => ast_builder::as_py_list(
-                files
-                    .iter()
-                    .map(|e| ast_builder::with_constant_str(e.clone()))
-                    .collect(),
-            ),
+            SrcType::List(files) => {
+              let mut srcs: Vec<MaybeLabel> =
+                files.iter().map(|src| MaybeLabel::from_str(&src)).collect();
+              srcs.sort();
+              ast_builder::as_py_list(
+                srcs
+                    .into_iter()
+                    .map(|e| e.to_expr())
+                    .collect()
+               )
+            }
         }
     }
 }

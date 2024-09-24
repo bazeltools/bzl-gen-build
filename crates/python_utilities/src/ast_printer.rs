@@ -323,7 +323,10 @@ mod tests {
 
 proto_library(
     name = "aa_proto",
-    srcs = ["aa.proto"],
+    srcs = [
+        "aa.proto",
+        "bb.proto",
+    ],
     deps = [
         "//x",
         "//y",
