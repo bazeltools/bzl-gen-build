@@ -6,6 +6,7 @@ use rustpython_parser::ast;
 pub(crate) struct WritingBuffer<'a> {
     buf: Vec<Cow<'a, str>>,
     indent: usize,
+    offset: usize,
     in_line: bool,
     in_keyword: bool,
 }
@@ -15,10 +16,16 @@ impl<'a> WritingBuffer<'a> {
         WritingBuffer {
             buf: Vec::default(),
             indent: 0,
+            offset: 0,
             in_line: true,
             in_keyword: false,
         }
     }
+
+    pub fn at_start(&self) -> bool {
+      self.offset == 0
+    }
+
     pub fn indent(&mut self) -> &mut Self {
         self.indent += 1;
         self
@@ -35,13 +42,16 @@ impl<'a> WritingBuffer<'a> {
 
     pub fn push_cow(&mut self, other: Cow<'a, str>) -> &mut Self {
         if !self.in_line {
+            self.offset += 1;
             self.buf.push(Cow::Borrowed("\n"));
             let indent_str = Cow::Borrowed("    ");
             for _ in 0..self.indent {
-                self.buf.push(indent_str.clone())
+                self.buf.push(indent_str.clone());
+                self.offset += 4
             }
         }
         self.in_line = true;
+        self.offset += other.len();
         self.buf.push(other);
         self
     }
@@ -283,10 +293,11 @@ impl CustomDisplay for ast::Expr {
                 let func_expr: &ast::Expr = &*func;
                 let name = func_expr.custom_fmt(str_buffer, true);
                 if name == "load" {
+                    // loads don't have spaces between in buildifier and are never nested
                     str_buffer.push_cow(Cow::Owned(name));
                     push_inline_list(str_buffer, defer, "(", args, keywords, ")");
                 } else {
-                    if !str_buffer.in_keyword {
+                    if !(str_buffer.in_keyword || str_buffer.at_start()) {
                         str_buffer.push("").finish_line();
                     }
                     str_buffer.push_cow(Cow::Owned(name));
@@ -331,6 +342,18 @@ java_proto_library(
 )
 
 filegroup(
+    name = "example_files",
+    srcs = glob(include = ["**/*.java"]),
+    visibility = ["//visibility:public"],
+)"#,
+        )
+    }
+
+    #[test]
+    fn round_trip_build_file_fg() {
+        // we don't indent before filegroup
+        assert_round_trip(
+            r#"filegroup(
     name = "example_files",
     srcs = glob(include = ["**/*.java"]),
     visibility = ["//visibility:public"],
