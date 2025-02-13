@@ -38,8 +38,8 @@ final case class Entity(parts: Vector[String]) {
 
 object Entity {
 
-  // We assume that imports starting with "com" will never be
-  // a continuation of a previous wildcard import.
+  // We assume that imports starting with special TLD (e.g. "com")
+  // will never be a continuation of a previous wildcard import.
   //
   // This is to prevent a combinatorial explosion when we see code
   // such as:
@@ -61,8 +61,23 @@ object Entity {
   // We could also handle other common TLDs such as "net" and "org"
   // the same way but "com" is the most common and one of the least
   // likely to occur as a "split import".
-  final val SpecialCom = "com"
-  final val SpecialComEntity = Entity.Resolved.Known(Entity.simple("com"))
+  //
+  // This feature is disabled by default, and enabled in the driver
+  // application using the environment variable BZL_GEN_SPECIAL_TLDS.
+  private var specialTlds: Map[String, Entity.Resolved] =
+    Map.empty
+
+  def setSpecialTlds(names: List[String]): Unit = {
+    specialTlds = names.iterator.map { name =>
+      (name, Entity.Resolved.Known(Entity.simple(name)))
+    }.toMap
+  }
+
+  def isSpecialTld(name: String): Boolean =
+    specialTlds.contains(name)
+
+  def getSpecialTld(name: String): Option[Entity.Resolved] =
+    specialTlds.get(name)
 
   implicit val entityEncoder: Encoder[Entity] =
     Encoder.encodeString.contramap(_.asString)
@@ -82,7 +97,9 @@ object Entity {
 
   implicit val catsOrderEntity: Order[Entity] =
     Order[Vector[String]].contramap[Entity](_.parts)
-  implicit val entityOrdering: Ordering[Entity] = catsOrderEntity.toOrdering
+
+  implicit val entityOrdering: Ordering[Entity] =
+    catsOrderEntity.toOrdering
 
   sealed abstract class Resolved {
     def /(that: String): Resolved

@@ -22,8 +22,6 @@ import scala.meta.parsers.XtensionParseInputLike
 import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
-import Entity.{SpecialCom, SpecialComEntity}
-
 object ScalaSourceEntityExtractor {
   sealed abstract class Err(message: String) extends Exception(message)
 
@@ -178,7 +176,10 @@ object ScalaSourceEntityExtractor {
         val root = resolve(s)
         nel.tail.foldLeft(root) { (r, p) =>
           val s = fn(p)
-          if (s == SpecialCom) SpecialComEntity else r / s
+          Entity.getSpecialTld(s) match {
+            case Some(resolved) => resolved
+            case None           => r / s
+          }
         }
       }
 
@@ -487,10 +488,9 @@ object ScalaSourceEntityExtractor {
             val rWild = uwild.resolve(acc)
 
             { (name: String) =>
-              if (name == SpecialCom) {
-                SpecialComEntity
-              } else {
-                acc(name) | (rWild / name)
+              Entity.getSpecialTld(name) match {
+                case Some(resolved) => resolved
+                case None           => acc(name) | (rWild / name)
               }
             }
           }
@@ -517,14 +517,15 @@ object ScalaSourceEntityExtractor {
         val packRes = ss.packageResolved
 
         { (name: String) =>
-          if (name == SpecialCom) {
-            SpecialComEntity
-          } else {
-            definite(name) match {
-              case Some(e) => e
-              case None =>
-                wild(name) | (packRes / name)
-            }
+          Entity.getSpecialTld(name) match {
+            case Some(resolved) =>
+              resolved
+            case None =>
+              definite(name) match {
+                case Some(e) => e
+                case None =>
+                  wild(name) | (packRes / name)
+              }
           }
         }
       }

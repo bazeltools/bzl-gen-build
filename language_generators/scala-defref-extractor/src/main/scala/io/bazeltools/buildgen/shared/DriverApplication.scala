@@ -92,6 +92,22 @@ abstract class DriverApplication extends IOApp {
     if (parallel) parallelExtractDataBlocks(workingDirectory, paths)
     else sequentialExtractDataBlocks(workingDirectory, paths)
 
+  private[this] def isValidTld(s: String): Boolean =
+    s.matches("^[a-z]+$")
+
+  private[this] def setSpecialTlds(specialTldsEnv: String): IO[Unit] = {
+    val names = specialTldsEnv.split(',').toList
+    if (names.forall(isValidTld)) {
+      IO(Entity.setSpecialTlds(names))
+    } else {
+      val invalid = names.filter(s => !isValidTld(s))
+      IO.raiseError(new Exception(s"invalid TLDs: $invalid"))
+    }
+  }
+
+  def getEnv(name: String): IO[Option[String]] =
+    IO(Option(System.getenv(name)))
+
   def main: Command[IO[ExitCode]] = decline.Command(
     name,
     "Extract definitions and references from source files"
@@ -107,6 +123,8 @@ abstract class DriverApplication extends IOApp {
     ).mapN {
       (inputs, workingDirectory, label_or_repo_path, outputPath, sequential) =>
         for {
+          specialTlds <- getEnv("BZL_GEN_SPECIAL_TLDS")
+          _ <- setSpecialTlds(specialTlds.getOrElse(""))
           dataBlocks <- extractDataBlocks(
             parallel = !sequential,
             workingDirectory,

@@ -273,14 +273,14 @@ object JavaSourceEntityExtractor {
     val expand: Entity => LazyList[Entity] =
       optPack match {
         case Some(p) => { (e: Entity) =>
-          if (e.parts.head == SpecialCom) {
+          if (Entity.isSpecialTld(e.parts.head)) {
             e #:: LazyList.empty
           } else if (e.isSingleton) {
             e #:: (p / e) #:: wildImp.map(_ / e)
           } else e #:: LazyList.empty
         }
         case None => { (e: Entity) =>
-          if (e.parts.head == SpecialCom) {
+          if (Entity.isSpecialTld(e.parts.head)) {
             e #:: LazyList.empty
           } else if (e.isSingleton) {
             e #:: wildImp.map(_ / e)
