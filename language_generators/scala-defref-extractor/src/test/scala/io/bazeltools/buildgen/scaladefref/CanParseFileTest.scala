@@ -58,11 +58,7 @@ class CanParseFileTest extends AnyFunSuite {
         Entity.dotted("com"),
         Entity.dotted("com.example"),
         Entity.dotted("com.example.Elephant"),
-        Entity.dotted("com.example.Wolf"),
-        Entity.dotted("com.foo.bar.com"),
-        Entity.dotted("com.foo.bar.com.example"),
-        Entity.dotted("com.foo.bar.com.example.Elephant"),
-        Entity.dotted("com.foo.bar.com.example.Wolf")
+        Entity.dotted("com.example.Wolf")
       ),
       SortedSet.empty
     )
@@ -327,44 +323,10 @@ trait BaseNode
         Entity.dotted("com.animal.dogs.retriever.CaseClassConfig"),
         Entity.dotted("com.animal.dogs.retriever.Express"),
         Entity.dotted("com.animal.dogs.retriever.JsonEncoder"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.big.BaseTrainingNode"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.housecat"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.housecat.Cuddle"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.tiger"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.tiger.TigerStripes"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Cute"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Small"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.retriever"),
         Entity.dotted("com.animal.dogs.retriever"),
-        Entity.dotted("com.animal.dogs.retriever.com"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.big"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs"),
         Entity.dotted("com.example.CaseClassConfig"),
         Entity.dotted("com.example.Express"),
-        Entity.dotted("com.example.JsonEncoder"),
-        Entity.dotted("com.example.com"),
-        Entity.dotted("com.example.com.animal"),
-        Entity.dotted("com.example.com.animal.cats"),
-        Entity.dotted("com.example.com.animal.cats.big"),
-        Entity.dotted("com.example.com.animal.cats.big.BaseTrainingNode"),
-        Entity.dotted("com.example.com.animal.cats.housecat"),
-        Entity.dotted("com.example.com.animal.cats.housecat.Cuddle"),
-        Entity.dotted("com.example.com.animal.cats.tiger"),
-        Entity.dotted("com.example.com.animal.cats.tiger.TigerStripes"),
-        Entity.dotted("com.example.com.animal.dogs"),
-        Entity.dotted("com.example.com.animal.dogs.pugs"),
-        Entity.dotted("com.example.com.animal.dogs.pugs.Cute"),
-        Entity.dotted("com.example.com.animal.dogs.pugs.Small"),
-        Entity.dotted("com.example.com.animal.dogs.retriever")
+        Entity.dotted("com.example.JsonEncoder")
       ),
       SortedSet.empty
     )
@@ -409,44 +371,10 @@ object BaseNode
         Entity.dotted("com.animal.dogs.retriever.CaseClassConfig"),
         Entity.dotted("com.animal.dogs.retriever.Express"),
         Entity.dotted("com.animal.dogs.retriever.JsonEncoder"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.big.BaseTrainingNode"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.housecat"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.housecat.Cuddle"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.tiger"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.tiger.TigerStripes"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Cute"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Small"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.retriever"),
         Entity.dotted("com.animal.dogs.retriever"),
-        Entity.dotted("com.animal.dogs.retriever.com"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.big"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs"),
         Entity.dotted("com.example.CaseClassConfig"),
         Entity.dotted("com.example.Express"),
-        Entity.dotted("com.example.JsonEncoder"),
-        Entity.dotted("com.example.com"),
-        Entity.dotted("com.example.com.animal"),
-        Entity.dotted("com.example.com.animal.cats"),
-        Entity.dotted("com.example.com.animal.cats.big"),
-        Entity.dotted("com.example.com.animal.cats.big.BaseTrainingNode"),
-        Entity.dotted("com.example.com.animal.cats.housecat"),
-        Entity.dotted("com.example.com.animal.cats.housecat.Cuddle"),
-        Entity.dotted("com.example.com.animal.cats.tiger"),
-        Entity.dotted("com.example.com.animal.cats.tiger.TigerStripes"),
-        Entity.dotted("com.example.com.animal.dogs"),
-        Entity.dotted("com.example.com.animal.dogs.pugs"),
-        Entity.dotted("com.example.com.animal.dogs.pugs.Cute"),
-        Entity.dotted("com.example.com.animal.dogs.pugs.Small"),
-        Entity.dotted("com.example.com.animal.dogs.retriever")
+        Entity.dotted("com.example.JsonEncoder")
       ),
       SortedSet.empty
     )
@@ -503,15 +431,8 @@ case class BaseNode() {
         Entity.dotted("com.animal.dogs.retriever"),
         Entity.dotted("com.animal.dogs.retriever.Bar"),
         Entity.dotted("com.example.???"),
-        Entity.dotted("com.example.com"),
-        Entity.dotted("com.example.com.animal"),
-        Entity.dotted("com.example.com.animal.dogs"),
-        Entity.dotted("com.example.com.animal.dogs.retriever"),
-        Entity.dotted("com.example.com.animal.dogs.retriever.Bar"),
         Entity.dotted("com.animal.dogs.gamma"),
         Entity.dotted("com.animal.dogs.gamma.Square"),
-        Entity.dotted("com.example.com.animal.dogs.gamma"),
-        Entity.dotted("com.example.com.animal.dogs.gamma.Square"),
         Entity.dotted("Data"),
         Entity.dotted("Option"),
         Entity.dotted("TypeB"),
@@ -693,17 +614,9 @@ object MyObject {
         Entity.dotted("com.baz.buzz.Dope.Long"),
         Entity.dotted("com.baz.buzz.Dope.Nope"),
         Entity.dotted("com.baz.buzz.Dope.String"),
-        Entity.dotted("com.baz.buzz.Dope.com"),
-        Entity.dotted("com.baz.buzz.Dope.com.baz"),
-        Entity.dotted("com.baz.buzz.Dope.com.baz.buzz"),
-        Entity.dotted("com.baz.buzz.Dope.com.baz.buzz.Dope"),
         Entity.dotted("com.foo.bar.???"),
         Entity.dotted("com.foo.bar.Long"),
-        Entity.dotted("com.foo.bar.Nope"),
-        Entity.dotted("com.foo.bar.com"),
-        Entity.dotted("com.foo.bar.com.baz"),
-        Entity.dotted("com.foo.bar.com.baz.buzz"),
-        Entity.dotted("com.foo.bar.com.baz.buzz.Dope")
+        Entity.dotted("com.foo.bar.Nope")
       ),
       bzl_gen_build_commands = SortedSet.empty
     )
@@ -726,11 +639,6 @@ object MyObject {
       ),
       refs = SortedSet(
         Entity.dotted("com"),
-        Entity.dotted("com.foo.bar.com"),
-        Entity.dotted("com.foo.bar.com.monovore"),
-        Entity.dotted("com.foo.bar.com.monovore.decline"),
-        Entity.dotted("com.foo.bar.com.monovore.decline.Command"),
-        Entity.dotted("com.foo.bar.com.monovore.decline.Opts"),
         Entity.dotted("com.monovore"),
         Entity.dotted("com.monovore.decline"),
         Entity.dotted("com.monovore.decline.Command"),
@@ -760,7 +668,6 @@ object MyObject {
       ),
       refs = SortedSet(
         Entity.dotted("com"),
-        Entity.dotted("com.foo.bar.com"),
         Entity.dotted("CustTpe"),
         Entity.dotted("Unit"),
         Entity.dotted("com.animal"),
@@ -769,14 +676,9 @@ object MyObject {
         Entity.dotted("com.animal.foo.bar.baz"),
         Entity.dotted("com.foo.bar.CustTpe"),
         Entity.dotted("com.foo.bar.Unit"),
-        Entity.dotted("com.foo.bar.com.animal"),
-        Entity.dotted("com.foo.bar.com.animal.foo"),
-        Entity.dotted("com.foo.bar.com.animal.foo.bar"),
-        Entity.dotted("com.foo.bar.com.animal.foo.bar.baz"),
         Entity.dotted("com.foo.bar.sparkSession"),
         Entity.dotted("sparkSession"),
         Entity.dotted("com.animal.foo.bar.baz.CustTpe"),
-        Entity.dotted("com.foo.bar.com.animal.foo.bar.baz.CustTpe"),
         Entity.dotted("String"),
         Entity.dotted("com.foo.bar.String")
       ),
