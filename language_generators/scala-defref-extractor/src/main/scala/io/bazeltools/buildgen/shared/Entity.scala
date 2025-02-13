@@ -37,6 +37,33 @@ final case class Entity(parts: Vector[String]) {
 }
 
 object Entity {
+
+  // We assume that imports starting with "com" will never be
+  // a continuation of a previous wildcard import.
+  //
+  // This is to prevent a combinatorial explosion when we see code
+  // such as:
+  //
+  //    import java.Math._
+  //    <hundreds of imports starting with com>
+  //
+  // This would break if we ever see code which imports
+  // `com.foo.com.bar.Qux` as:
+  //
+  //    import com.foo._
+  //    import com.bar.Qux
+  //
+  // Note that we must avoid breaking imports like:
+  //
+  //    import com.foo.com.bar.Qux
+  //    import com.acme.shadow.com.google.Dingus
+  //
+  // We could also handle other common TLDs such as "net" and "org"
+  // the same way but "com" is the most common and one of the least
+  // likely to occur as a "split import".
+  final val SpecialCom = "com"
+  final val SpecialComEntity = Entity.Resolved.Known(Entity.simple("com"))
+
   implicit val entityEncoder: Encoder[Entity] =
     Encoder.encodeString.contramap(_.asString)
 
