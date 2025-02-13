@@ -22,7 +22,7 @@ import scala.meta.parsers.XtensionParseInputLike
 import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
-import Entity.{ SpecialCom, SpecialComEntity }
+import Entity.{SpecialCom, SpecialComEntity}
 
 object ScalaSourceEntityExtractor {
   sealed abstract class Err(message: String) extends Exception(message)
