@@ -194,6 +194,8 @@ As an optimization, setting the environment variable `BZL_GEN_SPECIAL_TLDS` to a
 export BZL_GEN_SPECIAL_TLDS=com,net,org
 ```
 
+The names must match the regular expression `^[a-z]+$`.
+
 ### Extracting definitions from 3rdparty libraries
 
 Extracting definitions from 3rdparty libraries require some setup, also demonstrated in the `example/` repo.
