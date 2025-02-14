@@ -92,7 +92,8 @@ abstract class DriverApplication extends IOApp {
       paths: List[String],
       specialTlds: Set[String]
   ): IO[List[DataBlock]] =
-    if (parallel) parallelExtractDataBlocks(workingDirectory, paths, specialTlds)
+    if (parallel)
+      parallelExtractDataBlocks(workingDirectory, paths, specialTlds)
     else sequentialExtractDataBlocks(workingDirectory, paths, specialTlds)
 
   // We assume that imports starting with special TLD (e.g. "com")

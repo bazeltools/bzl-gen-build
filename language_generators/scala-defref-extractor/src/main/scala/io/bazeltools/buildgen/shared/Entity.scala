@@ -44,7 +44,9 @@ object Entity {
   implicit val entityDecoder: Decoder[Entity] =
     Decoder.decodeString.map(dotted(_))
 
-  def makeSpecialTldsMap(names: Iterable[String]): Map[String, Entity.Resolved] =
+  def makeSpecialTldsMap(
+      names: Iterable[String]
+  ): Map[String, Entity.Resolved] =
     names.iterator.map { name =>
       (name, Entity.Resolved.Known(Entity.simple(name)))
     }.toMap

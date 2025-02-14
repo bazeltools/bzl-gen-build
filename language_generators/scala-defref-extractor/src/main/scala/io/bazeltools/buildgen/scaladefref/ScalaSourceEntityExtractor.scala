@@ -22,7 +22,9 @@ import scala.meta.parsers.XtensionParseInputLike
 import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
-case class ScalaSourceEntityExtractor(specialTlds: Map[String, Entity.Resolved]) {
+case class ScalaSourceEntityExtractor(
+    specialTlds: Map[String, Entity.Resolved]
+) {
 
   def getSpecialTld(name: String): Option[Entity.Resolved] =
     specialTlds.get(name)
