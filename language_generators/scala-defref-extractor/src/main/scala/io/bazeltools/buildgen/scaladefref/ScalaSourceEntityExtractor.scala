@@ -22,7 +22,13 @@ import scala.meta.parsers.XtensionParseInputLike
 import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
-object ScalaSourceEntityExtractor {
+case class ScalaSourceEntityExtractor(
+    specialTlds: Map[String, Entity.Resolved]
+) {
+
+  def getSpecialTld(name: String): Option[Entity.Resolved] =
+    specialTlds.get(name)
+
   sealed abstract class Err(message: String) extends Exception(message)
 
   case class ScalaMetaParseException(parseError: Parsed.Error)
@@ -172,8 +178,15 @@ object ScalaSourceEntityExtractor {
       def resolveName[A](
           nel: NonEmptyList[A]
       )(fn: A => String): Entity.Resolved = {
-        val root = resolve(fn(nel.head))
-        nel.tail.foldLeft(root) { (r, p) => r / fn(p) }
+        val s = fn(nel.head)
+        val root = resolve(s)
+        nel.tail.foldLeft(root) { (r, p) =>
+          val s = fn(p)
+          getSpecialTld(s) match {
+            case Some(resolved) => resolved
+            case None           => r / s
+          }
+        }
       }
 
       def resolveNonLocals[A](
@@ -480,7 +493,12 @@ object ScalaSourceEntityExtractor {
           thisUWild.foldLeft(initRes) { (acc, uwild) =>
             val rWild = uwild.resolve(acc)
 
-            { (name: String) => acc(name) | (rWild / name) }
+            { (name: String) =>
+              getSpecialTld(name) match {
+                case Some(resolved) => resolved
+                case None           => acc(name) | (rWild / name)
+              }
+            }
           }
 
         { (name: String) =>
@@ -505,10 +523,15 @@ object ScalaSourceEntityExtractor {
         val packRes = ss.packageResolved
 
         { (name: String) =>
-          definite(name) match {
-            case Some(e) => e
+          getSpecialTld(name) match {
+            case Some(resolved) =>
+              resolved
             case None =>
-              wild(name) | (packRes / name)
+              definite(name) match {
+                case Some(e) => e
+                case None =>
+                  wild(name) | (packRes / name)
+              }
           }
         }
       }

@@ -11,7 +11,7 @@ class JavaSourceEntityExtractorTest extends munit.CatsEffectSuite {
   case class DefsRefs(defs: SortedSet[Entity], refs: SortedSet[Entity])
 
   def extractString(in: String): IO[Symbols] =
-    JavaSourceEntityExtractor.extract(in)
+    JavaSourceEntityExtractor(Set.empty).extract(in)
 
   def ents(s: String): SortedSet[Entity] =
     decode[List[Entity]](s).map(_.to(SortedSet)) match {

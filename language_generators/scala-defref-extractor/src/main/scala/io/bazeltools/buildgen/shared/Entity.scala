@@ -37,11 +37,19 @@ final case class Entity(parts: Vector[String]) {
 }
 
 object Entity {
+
   implicit val entityEncoder: Encoder[Entity] =
     Encoder.encodeString.contramap(_.asString)
 
   implicit val entityDecoder: Decoder[Entity] =
     Decoder.decodeString.map(dotted(_))
+
+  def makeSpecialTldsMap(
+      names: Iterable[String]
+  ): Map[String, Entity.Resolved] =
+    names.iterator.map { name =>
+      (name, Entity.Resolved.Known(Entity.simple(name)))
+    }.toMap
 
   val empty: Entity = Entity(Vector.empty)
 
@@ -55,7 +63,9 @@ object Entity {
 
   implicit val catsOrderEntity: Order[Entity] =
     Order[Vector[String]].contramap[Entity](_.parts)
-  implicit val entityOrdering: Ordering[Entity] = catsOrderEntity.toOrdering
+
+  implicit val entityOrdering: Ordering[Entity] =
+    catsOrderEntity.toOrdering
 
   sealed abstract class Resolved {
     def /(that: String): Resolved

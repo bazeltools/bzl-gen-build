@@ -184,6 +184,18 @@ In some situations, like for Protocol Buffer schemas, we want to generate second
 }
 ```
 
+### Heuristics
+
+Wildcard imports in Java and Scala can be expensive to resolve, since every subsequent import might be relative to the previous wildcard.
+
+As an optimization, setting the environment variable `BZL_GEN_SPECIAL_TLDS` to a comma-separated list will tell the driver program to assume any import rooted at one of those names is not relative. For example:
+
+```bash
+export BZL_GEN_SPECIAL_TLDS=com,net,org
+```
+
+The names must match the regular expression `^[a-z]+$`.
+
 ### Extracting definitions from 3rdparty libraries
 
 Extracting definitions from 3rdparty libraries require some setup, also demonstrated in the `example/` repo.

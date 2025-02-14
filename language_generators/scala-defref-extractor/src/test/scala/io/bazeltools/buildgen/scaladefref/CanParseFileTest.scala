@@ -7,8 +7,11 @@ import cats.effect.unsafe.implicits.global
 
 class CanParseFileTest extends AnyFunSuite {
 
-  def assertParse(str: String, expected: Symbols) =
-    assert(ScalaSourceEntityExtractor.extract(str).unsafeRunSync() === expected)
+  def assertParse(str: String, expected: Symbols, specialTlds: List[String]) = {
+    val map = Entity.makeSpecialTldsMap(specialTlds)
+    val got = ScalaSourceEntityExtractor(map).extract(str).unsafeRunSync()
+    assert(got === expected)
+  }
 
   test("can extract a simple file") {
     val simpleContent = """
@@ -25,10 +28,47 @@ class CanParseFileTest extends AnyFunSuite {
         SortedSet(Entity.dotted("String"), Entity.dotted("com.foo.bar.String")),
       bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("can extract a strange syntax") {
+    val simpleContent = """
+    package com.foo.bar
+    import com.example.Wolf
+    import com.example.Elephant
+
+    case class Cat(foo: String) extends Wolf with Elephant {
+        val expressionName = Dog()
+        // This format means we will throw a match error if Lizard != Dog with match
+        val (`expressionName`, pie) = (Lizard(), 33)
+    }
+    """
+
+    val expectedSymbols = Symbols(
+      SortedSet(
+        Entity.dotted("com.foo.bar.Cat"),
+        Entity.dotted("com.foo.bar.Cat.expressionName"),
+        Entity.dotted("com.foo.bar.Cat.foo"),
+        Entity.dotted("com.foo.bar.Cat.pie")
+      ),
+      SortedSet(
+        Entity.dotted("Dog"),
+        Entity.dotted("Lizard"),
+        Entity.dotted("String"),
+        Entity.dotted("com.foo.bar.Dog"),
+        Entity.dotted("com.foo.bar.Lizard"),
+        Entity.dotted("com.foo.bar.String"),
+        Entity.dotted("com"),
+        Entity.dotted("com.example"),
+        Entity.dotted("com.example.Elephant"),
+        Entity.dotted("com.example.Wolf")
+      ),
+      SortedSet.empty
+    )
+    assertParse(simpleContent, expectedSymbols, List("com"))
+  }
+
+  test("can extract a stranger syntax") {
     val simpleContent = """
     package com.foo.bar
     import com.example.Wolf
@@ -66,7 +106,7 @@ class CanParseFileTest extends AnyFunSuite {
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, Nil)
   }
 
   test("can extract a failing file") {
@@ -124,7 +164,7 @@ class CanParseFileTest extends AnyFunSuite {
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("can extract a failing file 2") {
@@ -218,7 +258,7 @@ trait TestTrait extends GenA with GenB with Zeb{
       SortedSet.empty
     )
 
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Add transitive links") {
@@ -240,7 +280,7 @@ trait TestTrait extends GenA with GenB with Zeb{
       ),
       bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Class arg") {
@@ -261,7 +301,7 @@ trait TestTrait extends GenA with GenB with Zeb{
       ),
       bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Add more transitive links") {
@@ -286,7 +326,7 @@ trait TestTrait extends GenA with GenB with Zeb{
       SortedSet.empty
     )
 
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Add trait transitive links") {
@@ -327,6 +367,62 @@ trait BaseNode
         Entity.dotted("com.animal.dogs.retriever.CaseClassConfig"),
         Entity.dotted("com.animal.dogs.retriever.Express"),
         Entity.dotted("com.animal.dogs.retriever.JsonEncoder"),
+        Entity.dotted("com.animal.dogs.retriever"),
+        Entity.dotted("com.example.CaseClassConfig"),
+        Entity.dotted("com.example.Express"),
+        Entity.dotted("com.example.JsonEncoder")
+      ),
+      SortedSet.empty
+    )
+    assertParse(simpleContent, expectedSymbols, List("com"))
+  }
+
+  test("Add trait transitive links, no .com TLD") {
+    val simpleContent = """
+package com.example
+import com.animal.dogs.retriever._
+import com.animal.dogs.pugs.{ Small, Cute }
+import com.animal.cats.tiger.TigerStripes
+import com.animal.cats.housecat.Cuddle
+import com.animal.cats.big.BaseTrainingNode
+
+trait BaseNode
+    extends CaseClassConfig[TigerStripes]
+    with BaseTrainingNode
+    with JsonEncoder
+    with Express {
+
+        }    """
+    val expectedSymbols = Symbols(
+      SortedSet(Entity.dotted("com.example.BaseNode")),
+      SortedSet(
+        Entity.dotted("CaseClassConfig"),
+        Entity.dotted("Express"),
+        Entity.dotted("JsonEncoder"),
+        Entity.dotted("com"),
+        Entity.dotted("com.animal"),
+        Entity.dotted("com.animal.cats"),
+        Entity.dotted("com.animal.cats.big"),
+        Entity.dotted("com.animal.cats.big.BaseTrainingNode"),
+        Entity.dotted("com.animal.cats.housecat"),
+        Entity.dotted("com.animal.cats.housecat.Cuddle"),
+        Entity.dotted("com.animal.cats.tiger"),
+        Entity.dotted("com.animal.cats.tiger.TigerStripes"),
+        Entity.dotted("com.animal.dogs"),
+        Entity.dotted("com.animal.dogs.pugs"),
+        Entity.dotted("com.animal.dogs.pugs.Cute"),
+        Entity.dotted("com.animal.dogs.pugs.Small"),
+        Entity.dotted("com.animal.dogs.retriever.CaseClassConfig"),
+        Entity.dotted("com.animal.dogs.retriever.Express"),
+        Entity.dotted("com.animal.dogs.retriever.JsonEncoder"),
+        Entity.dotted("com.animal.dogs.retriever"),
+        Entity.dotted("com.example.CaseClassConfig"),
+        Entity.dotted("com.example.Express"),
+        Entity.dotted("com.example.JsonEncoder"),
+        Entity.dotted("com.animal.dogs.retriever.com"),
+        Entity.dotted("com.animal.dogs.retriever.com.animal"),
+        Entity.dotted("com.animal.dogs.retriever.com.animal.cats"),
+        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.big"),
         Entity.dotted(
           "com.animal.dogs.retriever.com.animal.cats.big.BaseTrainingNode"
         ),
@@ -338,19 +434,11 @@ trait BaseNode
         Entity.dotted(
           "com.animal.dogs.retriever.com.animal.cats.tiger.TigerStripes"
         ),
+        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs"),
+        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs"),
         Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Cute"),
         Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Small"),
         Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.retriever"),
-        Entity.dotted("com.animal.dogs.retriever"),
-        Entity.dotted("com.animal.dogs.retriever.com"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.big"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs"),
-        Entity.dotted("com.example.CaseClassConfig"),
-        Entity.dotted("com.example.Express"),
-        Entity.dotted("com.example.JsonEncoder"),
         Entity.dotted("com.example.com"),
         Entity.dotted("com.example.com.animal"),
         Entity.dotted("com.example.com.animal.cats"),
@@ -368,7 +456,7 @@ trait BaseNode
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, Nil)
   }
 
   test("Add object transitive links") {
@@ -409,48 +497,14 @@ object BaseNode
         Entity.dotted("com.animal.dogs.retriever.CaseClassConfig"),
         Entity.dotted("com.animal.dogs.retriever.Express"),
         Entity.dotted("com.animal.dogs.retriever.JsonEncoder"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.big.BaseTrainingNode"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.housecat"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.housecat.Cuddle"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.tiger"),
-        Entity.dotted(
-          "com.animal.dogs.retriever.com.animal.cats.tiger.TigerStripes"
-        ),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Cute"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs.Small"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.retriever"),
         Entity.dotted("com.animal.dogs.retriever"),
-        Entity.dotted("com.animal.dogs.retriever.com"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.cats.big"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs"),
-        Entity.dotted("com.animal.dogs.retriever.com.animal.dogs.pugs"),
         Entity.dotted("com.example.CaseClassConfig"),
         Entity.dotted("com.example.Express"),
-        Entity.dotted("com.example.JsonEncoder"),
-        Entity.dotted("com.example.com"),
-        Entity.dotted("com.example.com.animal"),
-        Entity.dotted("com.example.com.animal.cats"),
-        Entity.dotted("com.example.com.animal.cats.big"),
-        Entity.dotted("com.example.com.animal.cats.big.BaseTrainingNode"),
-        Entity.dotted("com.example.com.animal.cats.housecat"),
-        Entity.dotted("com.example.com.animal.cats.housecat.Cuddle"),
-        Entity.dotted("com.example.com.animal.cats.tiger"),
-        Entity.dotted("com.example.com.animal.cats.tiger.TigerStripes"),
-        Entity.dotted("com.example.com.animal.dogs"),
-        Entity.dotted("com.example.com.animal.dogs.pugs"),
-        Entity.dotted("com.example.com.animal.dogs.pugs.Cute"),
-        Entity.dotted("com.example.com.animal.dogs.pugs.Small"),
-        Entity.dotted("com.example.com.animal.dogs.retriever")
+        Entity.dotted("com.example.JsonEncoder")
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Add public method link") {
@@ -503,15 +557,8 @@ case class BaseNode() {
         Entity.dotted("com.animal.dogs.retriever"),
         Entity.dotted("com.animal.dogs.retriever.Bar"),
         Entity.dotted("com.example.???"),
-        Entity.dotted("com.example.com"),
-        Entity.dotted("com.example.com.animal"),
-        Entity.dotted("com.example.com.animal.dogs"),
-        Entity.dotted("com.example.com.animal.dogs.retriever"),
-        Entity.dotted("com.example.com.animal.dogs.retriever.Bar"),
         Entity.dotted("com.animal.dogs.gamma"),
         Entity.dotted("com.animal.dogs.gamma.Square"),
-        Entity.dotted("com.example.com.animal.dogs.gamma"),
-        Entity.dotted("com.example.com.animal.dogs.gamma.Square"),
         Entity.dotted("Data"),
         Entity.dotted("Option"),
         Entity.dotted("TypeB"),
@@ -563,7 +610,7 @@ case class BaseNode() {
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Failing sample") {
@@ -620,7 +667,7 @@ object syntax
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("object value") {
@@ -659,7 +706,7 @@ object MyObject {
       ),
       SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Wildcard import") {
@@ -693,21 +740,13 @@ object MyObject {
         Entity.dotted("com.baz.buzz.Dope.Long"),
         Entity.dotted("com.baz.buzz.Dope.Nope"),
         Entity.dotted("com.baz.buzz.Dope.String"),
-        Entity.dotted("com.baz.buzz.Dope.com"),
-        Entity.dotted("com.baz.buzz.Dope.com.baz"),
-        Entity.dotted("com.baz.buzz.Dope.com.baz.buzz"),
-        Entity.dotted("com.baz.buzz.Dope.com.baz.buzz.Dope"),
         Entity.dotted("com.foo.bar.???"),
         Entity.dotted("com.foo.bar.Long"),
-        Entity.dotted("com.foo.bar.Nope"),
-        Entity.dotted("com.foo.bar.com"),
-        Entity.dotted("com.foo.bar.com.baz"),
-        Entity.dotted("com.foo.bar.com.baz.buzz"),
-        Entity.dotted("com.foo.bar.com.baz.buzz.Dope")
+        Entity.dotted("com.foo.bar.Nope")
       ),
       bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Refer to object defined elsewhere") {
@@ -726,11 +765,6 @@ object MyObject {
       ),
       refs = SortedSet(
         Entity.dotted("com"),
-        Entity.dotted("com.foo.bar.com"),
-        Entity.dotted("com.foo.bar.com.monovore"),
-        Entity.dotted("com.foo.bar.com.monovore.decline"),
-        Entity.dotted("com.foo.bar.com.monovore.decline.Command"),
-        Entity.dotted("com.foo.bar.com.monovore.decline.Opts"),
         Entity.dotted("com.monovore"),
         Entity.dotted("com.monovore.decline"),
         Entity.dotted("com.monovore.decline.Command"),
@@ -738,7 +772,7 @@ object MyObject {
       ),
       bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
   test("Failing refs case") {
@@ -760,7 +794,6 @@ object MyObject {
       ),
       refs = SortedSet(
         Entity.dotted("com"),
-        Entity.dotted("com.foo.bar.com"),
         Entity.dotted("CustTpe"),
         Entity.dotted("Unit"),
         Entity.dotted("com.animal"),
@@ -769,20 +802,15 @@ object MyObject {
         Entity.dotted("com.animal.foo.bar.baz"),
         Entity.dotted("com.foo.bar.CustTpe"),
         Entity.dotted("com.foo.bar.Unit"),
-        Entity.dotted("com.foo.bar.com.animal"),
-        Entity.dotted("com.foo.bar.com.animal.foo"),
-        Entity.dotted("com.foo.bar.com.animal.foo.bar"),
-        Entity.dotted("com.foo.bar.com.animal.foo.bar.baz"),
         Entity.dotted("com.foo.bar.sparkSession"),
         Entity.dotted("sparkSession"),
         Entity.dotted("com.animal.foo.bar.baz.CustTpe"),
-        Entity.dotted("com.foo.bar.com.animal.foo.bar.baz.CustTpe"),
         Entity.dotted("String"),
         Entity.dotted("com.foo.bar.String")
       ),
       bzl_gen_build_commands = SortedSet.empty
     )
-    assertParse(simpleContent, expectedSymbols)
+    assertParse(simpleContent, expectedSymbols, List("com"))
   }
 
 }

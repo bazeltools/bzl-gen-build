@@ -7,8 +7,10 @@ import cats.effect.unsafe.implicits.global
 
 class CanParseFileTest extends AnyFunSuite {
 
-  def assertParse(str: String, expected: Symbols) =
-    assert(JavaSourceEntityExtractor.extract(str).unsafeRunSync() === expected)
+  def assertParse(str: String, expected: Symbols) = {
+    val got = JavaSourceEntityExtractor(Set.empty).extract(str).unsafeRunSync()
+    assert(got === expected)
+  }
 
   test("can extract a simple file") {
     val simpleContent = """
