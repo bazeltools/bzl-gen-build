@@ -13,7 +13,7 @@ import io.circe.syntax.EncoderOps
 
 abstract class DriverApplication extends IOApp {
   def name: String
-  def extract(data: String): IO[Symbols]
+  def extract(data: String, specialTlds: Set[String]): IO[Symbols]
 
   def readToString(path: Path): IO[String] =
     IO.blocking(
@@ -30,7 +30,8 @@ abstract class DriverApplication extends IOApp {
 
   private[this] def parallelExtractDataBlocks(
       workingDirectory: Path,
-      paths: List[String]
+      paths: List[String],
+      specialTlds: Set[String]
   ): IO[List[DataBlock]] =
     paths.sorted
       .traverse { path =>
@@ -46,7 +47,7 @@ abstract class DriverApplication extends IOApp {
         // which is limited to the number of CPUs
         // we can parse all the code
         inMemory.parTraverse { case (path, content) =>
-          extract(content).attempt
+          extract(content, specialTlds).attempt
             .flatMap {
               case Right(x) => IO.pure(x)
               case Left(err) =>
@@ -63,14 +64,15 @@ abstract class DriverApplication extends IOApp {
 
   private[this] def sequentialExtractDataBlocks(
       workingDirectory: Path,
-      paths: List[String]
+      paths: List[String],
+      specialTlds: Set[String]
   ): IO[List[DataBlock]] =
     paths.sorted
       .traverse { path =>
         val fullPath = workingDirectory.resolve(path)
         for {
           content <- readToString(fullPath)
-          try_e <- extract(content).attempt
+          try_e <- extract(content, specialTlds).attempt
           symbols <- try_e match {
             case Right(x) => IO.pure(x)
             case Left(err) =>
@@ -87,26 +89,54 @@ abstract class DriverApplication extends IOApp {
   private[this] def extractDataBlocks(
       parallel: Boolean,
       workingDirectory: Path,
-      paths: List[String]
+      paths: List[String],
+      specialTlds: Set[String]
   ): IO[List[DataBlock]] =
-    if (parallel) parallelExtractDataBlocks(workingDirectory, paths)
-    else sequentialExtractDataBlocks(workingDirectory, paths)
+    if (parallel) parallelExtractDataBlocks(workingDirectory, paths, specialTlds)
+    else sequentialExtractDataBlocks(workingDirectory, paths, specialTlds)
+
+  // We assume that imports starting with special TLD (e.g. "com")
+  // will never be a continuation of a previous wildcard import.
+  //
+  // This is to prevent a combinatorial explosion when we see code
+  // such as:
+  //
+  //    import java.Math._
+  //    <hundreds of imports starting with com>
+  //
+  // This would break if we ever see code which imports
+  // `com.foo.com.bar.Qux` as:
+  //
+  //    import com.foo._
+  //    import com.bar.Qux
+  //
+  // Note that we must avoid breaking imports like:
+  //
+  //    import com.foo.com.bar.Qux
+  //    import com.acme.shadow.com.google.Dingus
+  //
+  // We could also handle other common TLDs such as "net" and "org"
+  // the same way but "com" is the most common and one of the least
+  // likely to occur as a "split import".
+  //
+  // This feature is disabled by default, and enabled in the driver
+  // application using the environment variable BZL_GEN_SPECIAL_TLDS.
+  private[this] def getSpecialTlds: IO[Set[String]] =
+    getEnv("BZL_GEN_SPECIAL_TLDS").flatMap {
+      case Some(s) if s.nonEmpty =>
+        val set = s.split(',').toSet
+        val invalid = set.filter(s => !isValidTld(s))
+        if (invalid.isEmpty) IO.pure(set)
+        else IO.raiseError(new Exception(s"invalid TLDs: $invalid"))
+      case _ =>
+        IO.pure(Set.empty)
+    }
+
+  private[this] def getEnv(name: String): IO[Option[String]] =
+    IO(Option(System.getenv(name)))
 
   private[this] def isValidTld(s: String): Boolean =
     s.matches("^[a-z]+$")
-
-  private[this] def setSpecialTlds(specialTldsEnv: String): IO[Unit] = {
-    val names = specialTldsEnv.split(',').toList
-    if (names.forall(isValidTld)) {
-      IO(Entity.setSpecialTlds(names))
-    } else {
-      val invalid = names.filter(s => !isValidTld(s))
-      IO.raiseError(new Exception(s"invalid TLDs: $invalid"))
-    }
-  }
-
-  def getEnv(name: String): IO[Option[String]] =
-    IO(Option(System.getenv(name)))
 
   def main: Command[IO[ExitCode]] = decline.Command(
     name,
@@ -123,12 +153,12 @@ abstract class DriverApplication extends IOApp {
     ).mapN {
       (inputs, workingDirectory, label_or_repo_path, outputPath, sequential) =>
         for {
-          specialTlds <- getEnv("BZL_GEN_SPECIAL_TLDS")
-          _ <- setSpecialTlds(specialTlds.getOrElse(""))
+          specialTlds <- getSpecialTlds
           dataBlocks <- extractDataBlocks(
             parallel = !sequential,
             workingDirectory,
-            inputs.split(',').toList
+            inputs.split(',').toList,
+            specialTlds
           )
           extractedData = ExtractedData(
             label_or_repo_path = label_or_repo_path,

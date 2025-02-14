@@ -38,52 +38,16 @@ final case class Entity(parts: Vector[String]) {
 
 object Entity {
 
-  // We assume that imports starting with special TLD (e.g. "com")
-  // will never be a continuation of a previous wildcard import.
-  //
-  // This is to prevent a combinatorial explosion when we see code
-  // such as:
-  //
-  //    import java.Math._
-  //    <hundreds of imports starting with com>
-  //
-  // This would break if we ever see code which imports
-  // `com.foo.com.bar.Qux` as:
-  //
-  //    import com.foo._
-  //    import com.bar.Qux
-  //
-  // Note that we must avoid breaking imports like:
-  //
-  //    import com.foo.com.bar.Qux
-  //    import com.acme.shadow.com.google.Dingus
-  //
-  // We could also handle other common TLDs such as "net" and "org"
-  // the same way but "com" is the most common and one of the least
-  // likely to occur as a "split import".
-  //
-  // This feature is disabled by default, and enabled in the driver
-  // application using the environment variable BZL_GEN_SPECIAL_TLDS.
-  private var specialTlds: Map[String, Entity.Resolved] =
-    Map.empty
-
-  def setSpecialTlds(names: List[String]): Unit = {
-    specialTlds = names.iterator.map { name =>
-      (name, Entity.Resolved.Known(Entity.simple(name)))
-    }.toMap
-  }
-
-  def isSpecialTld(name: String): Boolean =
-    specialTlds.contains(name)
-
-  def getSpecialTld(name: String): Option[Entity.Resolved] =
-    specialTlds.get(name)
-
   implicit val entityEncoder: Encoder[Entity] =
     Encoder.encodeString.contramap(_.asString)
 
   implicit val entityDecoder: Decoder[Entity] =
     Decoder.decodeString.map(dotted(_))
+
+  def makeSpecialTldsMap(names: Iterable[String]): Map[String, Entity.Resolved] =
+    names.iterator.map { name =>
+      (name, Entity.Resolved.Known(Entity.simple(name)))
+    }.toMap
 
   val empty: Entity = Entity(Vector.empty)
 

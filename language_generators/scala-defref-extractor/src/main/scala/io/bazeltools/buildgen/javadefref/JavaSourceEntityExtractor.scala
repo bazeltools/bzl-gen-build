@@ -20,7 +20,11 @@ import com.github.javaparser.ParseProblemException
  * based on Apache Licensed:
  * https://github.com/pantsbuild/pants/blob/4e7c57db992150b3fc972e684561edb8231bba3d/src/python/pants/backend/java/dependency_inference/PantsJavaParserLauncher.java#L1
  */
-object JavaSourceEntityExtractor {
+case class JavaSourceEntityExtractor(specialTlds: Set[String]) {
+
+  def isSpecialTld(name: String): Boolean =
+    specialTlds(name)
+
   // this is mutable, so we need to guard any access
   private[this] lazy val parser = {
     val config = new ParserConfiguration();
@@ -273,14 +277,14 @@ object JavaSourceEntityExtractor {
     val expand: Entity => LazyList[Entity] =
       optPack match {
         case Some(p) => { (e: Entity) =>
-          if (Entity.isSpecialTld(e.parts.head)) {
+          if (isSpecialTld(e.parts.head)) {
             e #:: LazyList.empty
           } else if (e.isSingleton) {
             e #:: (p / e) #:: wildImp.map(_ / e)
           } else e #:: LazyList.empty
         }
         case None => { (e: Entity) =>
-          if (Entity.isSpecialTld(e.parts.head)) {
+          if (isSpecialTld(e.parts.head)) {
             e #:: LazyList.empty
           } else if (e.isSingleton) {
             e #:: wildImp.map(_ / e)

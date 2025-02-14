@@ -22,7 +22,11 @@ import scala.meta.parsers.XtensionParseInputLike
 import cats.syntax.all._
 import io.bazeltools.buildgen.shared.{Entity, PathTree, Symbols}
 
-object ScalaSourceEntityExtractor {
+case class ScalaSourceEntityExtractor(specialTlds: Map[String, Entity.Resolved]) {
+
+  def getSpecialTld(name: String): Option[Entity.Resolved] =
+    specialTlds.get(name)
+
   sealed abstract class Err(message: String) extends Exception(message)
 
   case class ScalaMetaParseException(parseError: Parsed.Error)
@@ -176,7 +180,7 @@ object ScalaSourceEntityExtractor {
         val root = resolve(s)
         nel.tail.foldLeft(root) { (r, p) =>
           val s = fn(p)
-          Entity.getSpecialTld(s) match {
+          getSpecialTld(s) match {
             case Some(resolved) => resolved
             case None           => r / s
           }
@@ -488,7 +492,7 @@ object ScalaSourceEntityExtractor {
             val rWild = uwild.resolve(acc)
 
             { (name: String) =>
-              Entity.getSpecialTld(name) match {
+              getSpecialTld(name) match {
                 case Some(resolved) => resolved
                 case None           => acc(name) | (rWild / name)
               }
@@ -517,7 +521,7 @@ object ScalaSourceEntityExtractor {
         val packRes = ss.packageResolved
 
         { (name: String) =>
-          Entity.getSpecialTld(name) match {
+          getSpecialTld(name) match {
             case Some(resolved) =>
               resolved
             case None =>
