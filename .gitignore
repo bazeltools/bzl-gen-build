@@ -9,3 +9,4 @@
 .metals
 
 bazel-*
+metals.sbt
