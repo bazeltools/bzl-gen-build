@@ -17,6 +17,9 @@ pub struct ModuleConfig {
 
     #[serde(default)]
     pub test_globs: Vec<String>,
+
+    #[serde(default)]
+    pub kitchen_sink_prefixes: Vec<String>,
 }
 
 impl ModuleConfig {

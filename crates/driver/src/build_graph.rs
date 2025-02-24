@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{async_read_json_file, read_json_file, write_json_file, BuildGraphArgs, Opt};
-
+use crate::module_config::ModuleConfig;
 use anyhow::{anyhow, Result};
 use bzl_gen_build_shared_types::{
     directive::{
@@ -474,7 +474,7 @@ impl GraphState {
         }
     }
 
-    fn in_cycle(&self, node: usize) -> bool {
+    fn in_cycle(&self, node: usize, kitchen_sink_prefixes: &Vec<String>) -> Result<bool> {
         let mut to_visit = vec![node];
         let mut inner_visited: HashSet<usize> = HashSet::default();
 
@@ -486,14 +486,27 @@ impl GraphState {
             for outbound_edge in self.get_all_outbound_nodes(nxt) {
                 to_visit.push(outbound_edge);
                 if outbound_edge == node {
-                    return true;
+                    if let Some(node_label) = self.get_node_label(&node) {
+                        if !kitchen_sink_prefixes.iter().any(|p| node_label.starts_with(p)) {
+                            let mut cycle_nodes: Vec<_> = inner_visited.iter().cloned().collect();
+                            cycle_nodes.sort();
+                            
+                            return Err(anyhow::anyhow!("Circular dependency found in the package {}.
+  {}
+  Resolve the cycle, or allow the cycle this by adding kitchen_sink_prefixes in the module config JSON.",
+                                node_label,
+                                cycle_nodes.iter().map(|n| self.get_node_label(n).unwrap_or_default()).collect::<Vec<_>>().join(", ")
+                            ));
+                        }
+                    }
+                    return Ok(true);
                 }
             }
         }
-        false
+        Ok(false)
     }
 
-    pub fn collapse(&mut self) -> Result<()> {
+    pub fn collapse(&mut self, kitchen_sink_prefixes: &Vec<String>) -> Result<()> {
         let mut no_loops: HashSet<usize> = HashSet::default();
         loop {
             let mut incompress = None;
@@ -506,11 +519,15 @@ impl GraphState {
                 if no_loops.contains(node) {
                     continue;
                 }
-                if self.in_cycle(*node) {
-                    incompress = Some(*node);
-                    break 'outer_loop;
-                } else {
-                    no_loops.insert(*node);
+                match self.in_cycle(*node, kitchen_sink_prefixes) {
+                    Ok(cycle) =>
+                        if cycle {
+                            incompress = Some(*node);
+                            break 'outer_loop;
+                        } else {
+                            no_loops.insert(*node);
+                        },
+                    Err(e) => return Err(e)
                 }
             }
             if let Some(i) = incompress {
@@ -827,6 +844,19 @@ pub async fn build_graph(
 
     let mut configured_entity_directives: Vec<directive::EntityDirectiveConfig> = Vec::default();
 
+    let mut module_config_opt: Option<&ModuleConfig> = None;
+    for (_k, v) in project_conf.configurations.iter() {
+        if module_config_opt.is_none() {
+            module_config_opt = Some(v);
+        } else {
+            return Err(anyhow::anyhow!("Multiple configurations"));
+        }
+    }
+    let kitchen_sink_prefixes = if let Some(a) = module_config_opt {
+        &a.kitchen_sink_prefixes
+    } else {
+        return Err(anyhow::anyhow!("module_config not found"));
+    };
     for directives in project_conf.path_directives.iter() {
         match directives.directives().as_ref() {
             Ok(parsed_directives) => {
@@ -862,7 +892,7 @@ pub async fn build_graph(
         graph.compile_edges.len()
     );
     let st = Instant::now();
-    graph.collapse()?;
+    graph.collapse(&kitchen_sink_prefixes)?;
     info!(
         "Graph iteration complete after {:?}, have {} nodes after processing",
         st.elapsed(),
@@ -954,7 +984,7 @@ mod tests {
         graph.add_compile_edge(foo_bar_baz_boot, foo_bar_ba3);
 
         graph
-            .collapse()
+            .collapse(&vec!["com/foo/".to_string()])
             .expect("Should be able to collapse the graph");
 
         assert_eq!(graph.node_count(), 2);
@@ -987,7 +1017,7 @@ mod tests {
         graph.add_compile_edge(foo_bar_baz_boot, foo_bar_ba3);
 
         graph
-            .collapse()
+            .collapse(&vec!["com/foo/".to_string()])
             .expect("Should be able to collapse the graph");
 
         assert_eq!(graph.node_count(), 2);
@@ -1019,7 +1049,7 @@ mod tests {
         graph.add_compile_edge(foo_bar_ba2, foo_bar_ba3);
 
         graph
-            .collapse()
+            .collapse(&vec!["com/foo/".to_string()])
             .expect("Should be able to collapse the graph");
 
         assert_eq!(graph.node_count(), 2);
@@ -1048,6 +1078,23 @@ mod tests {
     }
 
     #[test]
+    fn test_simple_graph_collapse_fail() {
+        let mut graph = GraphState::default();
+
+        let foo_bar_baz = graph.add_node("com/foo/bar/baz".to_string(), NodeType::RealNode);
+        let foo_bar_ba2 = graph.add_node("com/foo/bar/ba2".to_string(), NodeType::RealNode);
+        let foo_bar_ba3 = graph.add_node("com/foo/bar/ba3".to_string(), NodeType::RealNode);
+        graph.add_compile_edge(foo_bar_baz, foo_bar_ba2);
+        graph.add_compile_edge(foo_bar_ba2, foo_bar_baz);
+        graph.add_compile_edge(foo_bar_ba2, foo_bar_ba3);
+
+        let e = graph
+            .collapse(&vec![])
+            .expect_err("Should be fail to collapse the graph without kitchen sink prefixes");
+        assert!(e.to_string().contains("com/foo/bar/baz, com/foo/bar/ba2"))
+    }
+
+    #[test]
     fn test_simple_graph_no_collapse() {
         let mut graph = GraphState::default();
 
@@ -1058,7 +1105,7 @@ mod tests {
         graph.add_compile_edge(foo_bar_ba2, foo_bar_ba3);
 
         graph
-            .collapse()
+            .collapse(&vec![])
             .expect("Should be able to collapse the graph");
 
         assert_eq!(graph.node_count(), 3);

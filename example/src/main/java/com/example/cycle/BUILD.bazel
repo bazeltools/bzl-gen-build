@@ -1,0 +1,7 @@
+# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+filegroup(
+    name = "cycle_files",
+    srcs = glob(include = ["**/*.java"]),
+    visibility = ["//visibility:public"],
+)
+# ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
