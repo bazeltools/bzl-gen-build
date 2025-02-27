@@ -523,16 +523,11 @@ impl GraphState {
                 if no_loops.contains(node) {
                     continue;
                 }
-                match self.in_cycle(*node, circular_dependency_allow_list) {
-                    Ok(cycle) => {
-                        if cycle {
-                            incompress = Some(*node);
-                            break 'outer_loop;
-                        } else {
-                            no_loops.insert(*node);
-                        }
-                    }
-                    Err(e) => return Err(e),
+                if self.in_cycle(*node, circular_dependency_allow_list)? {
+                    incompress = Some(*node);
+                    break 'outer_loop;
+                } else {
+                    no_loops.insert(*node);
                 }
             }
             if let Some(i) = incompress {
