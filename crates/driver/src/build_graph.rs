@@ -5,7 +5,6 @@ use std::{
     time::Instant,
 };
 
-use crate::module_config::ModuleConfig;
 use crate::{async_read_json_file, read_json_file, write_json_file, BuildGraphArgs, Opt};
 use anyhow::{anyhow, Result};
 use bzl_gen_build_shared_types::{
@@ -844,19 +843,10 @@ pub async fn build_graph(
 
     let mut configured_entity_directives: Vec<directive::EntityDirectiveConfig> = Vec::default();
 
-    let mut module_config_opt: Option<&ModuleConfig> = None;
-    for (_k, v) in project_conf.configurations.iter() {
-        if module_config_opt.is_none() {
-            module_config_opt = Some(v);
-        } else {
-            return Err(anyhow::anyhow!("Multiple configurations"));
-        }
+    let mut circular_allow_list: Vec<String> = vec![];
+    for (_k, v) in project_conf.configurations.iter() {        
+        circular_allow_list.extend(v.circular_dependency_allow_list.iter().cloned());
     }
-    let circular_dependency_allow_list = if let Some(a) = module_config_opt {
-        &a.circular_dependency_allow_list
-    } else {
-        return Err(anyhow::anyhow!("module_config not found"));
-    };
     for directives in project_conf.path_directives.iter() {
         match directives.directives().as_ref() {
             Ok(parsed_directives) => {
@@ -892,7 +882,7 @@ pub async fn build_graph(
         graph.compile_edges.len()
     );
     let st = Instant::now();
-    graph.collapse(&circular_dependency_allow_list)?;
+    graph.collapse(&circular_allow_list)?;
     info!(
         "Graph iteration complete after {:?}, have {} nodes after processing",
         st.elapsed(),
