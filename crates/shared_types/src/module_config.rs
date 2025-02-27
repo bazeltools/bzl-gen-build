@@ -19,7 +19,7 @@ pub struct ModuleConfig {
     pub test_globs: Vec<String>,
 
     #[serde(default)]
-    pub kitchen_sink_prefixes: Vec<String>,
+    pub circular_dependency_allow_list: Vec<String>,
 }
 
 impl ModuleConfig {

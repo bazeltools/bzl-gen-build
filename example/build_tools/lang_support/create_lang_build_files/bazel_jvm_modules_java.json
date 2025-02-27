@@ -34,7 +34,7 @@
       "test_roots": [
         "src/test/java"
       ],
-      "kitchen_sink_prefixes": [
+      "circular_dependency_allow_list": [
         "src/main/java/com/example"
       ]
     }

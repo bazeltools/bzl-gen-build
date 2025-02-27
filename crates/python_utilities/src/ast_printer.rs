@@ -23,7 +23,7 @@ impl<'a> WritingBuffer<'a> {
     }
 
     pub fn at_start(&self) -> bool {
-      self.offset == 0
+        self.offset == 0
     }
 
     pub fn indent(&mut self) -> &mut Self {

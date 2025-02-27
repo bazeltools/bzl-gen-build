@@ -5,8 +5,8 @@ use std::{
     time::Instant,
 };
 
-use crate::{async_read_json_file, read_json_file, write_json_file, BuildGraphArgs, Opt};
 use crate::module_config::ModuleConfig;
+use crate::{async_read_json_file, read_json_file, write_json_file, BuildGraphArgs, Opt};
 use anyhow::{anyhow, Result};
 use bzl_gen_build_shared_types::{
     directive::{
@@ -474,7 +474,7 @@ impl GraphState {
         }
     }
 
-    fn in_cycle(&self, node: usize, kitchen_sink_prefixes: &Vec<String>) -> Result<bool> {
+    fn in_cycle(&self, node: usize, circular_dependency_allow_list: &Vec<String>) -> Result<bool> {
         let mut to_visit = vec![node];
         let mut inner_visited: HashSet<usize> = HashSet::default();
 
@@ -487,13 +487,16 @@ impl GraphState {
                 to_visit.push(outbound_edge);
                 if outbound_edge == node {
                     if let Some(node_label) = self.get_node_label(&node) {
-                        if !kitchen_sink_prefixes.iter().any(|p| node_label.starts_with(p)) {
+                        if !circular_dependency_allow_list
+                            .iter()
+                            .any(|p| node_label.starts_with(p))
+                        {
                             let mut cycle_nodes: Vec<_> = inner_visited.iter().cloned().collect();
                             cycle_nodes.sort();
-                            
+
                             return Err(anyhow::anyhow!("Circular dependency found in the package {}.
   {}
-  Resolve the cycle, or opt in to collapsing this into a higher-level build target by adding kitchen_sink_prefixes in the module config JSON.",
+  Resolve the cycle, or opt in to collapsing this into a higher-level build target by adding circular_dependency_allow_list in the module config JSON.",
                                 node_label,
                                 cycle_nodes.iter().map(|n| self.get_node_label(n).unwrap_or_default()).collect::<Vec<_>>().join(", ")
                             ));
@@ -506,7 +509,7 @@ impl GraphState {
         Ok(false)
     }
 
-    pub fn collapse(&mut self, kitchen_sink_prefixes: &Vec<String>) -> Result<()> {
+    pub fn collapse(&mut self, circular_dependency_allow_list: &Vec<String>) -> Result<()> {
         let mut no_loops: HashSet<usize> = HashSet::default();
         loop {
             let mut incompress = None;
@@ -519,15 +522,16 @@ impl GraphState {
                 if no_loops.contains(node) {
                     continue;
                 }
-                match self.in_cycle(*node, kitchen_sink_prefixes) {
-                    Ok(cycle) =>
+                match self.in_cycle(*node, circular_dependency_allow_list) {
+                    Ok(cycle) => {
                         if cycle {
                             incompress = Some(*node);
                             break 'outer_loop;
                         } else {
                             no_loops.insert(*node);
-                        },
-                    Err(e) => return Err(e)
+                        }
+                    }
+                    Err(e) => return Err(e),
                 }
             }
             if let Some(i) = incompress {
@@ -852,8 +856,8 @@ pub async fn build_graph(
             return Err(anyhow::anyhow!("Multiple configurations"));
         }
     }
-    let kitchen_sink_prefixes = if let Some(a) = module_config_opt {
-        &a.kitchen_sink_prefixes
+    let circular_dependency_allow_list = if let Some(a) = module_config_opt {
+        &a.circular_dependency_allow_list
     } else {
         return Err(anyhow::anyhow!("module_config not found"));
     };
@@ -892,7 +896,7 @@ pub async fn build_graph(
         graph.compile_edges.len()
     );
     let st = Instant::now();
-    graph.collapse(&kitchen_sink_prefixes)?;
+    graph.collapse(&circular_dependency_allow_list)?;
     info!(
         "Graph iteration complete after {:?}, have {} nodes after processing",
         st.elapsed(),
