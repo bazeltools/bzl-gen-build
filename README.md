@@ -94,7 +94,9 @@ This mode is to prepare the inputs to the system, it will run + cache the output
 This is a relatively simple app and maybe should be eliminated in the future. But its goal is to take the outputs from `extract` and trim to a smaller number (collapsing up a tree) of files containing just definitions. We do this so in future phases when we need to load everything we can get all our definitions first to trim out all the files as they are being loaded. Scala/Java can have a lot of references as they are often heuristic-based when we have limited insights (wildcard imports).
 
 #### System driver: build-graph
-This system is to resolve all of the links between the graph. This will collapse nodes together which have circular dependencies between them to a common ancestor. The output will contain all of the final nodes, along with which sets of source nodes were collapsed into them, and their dependencies.
+This system is to resolve all of the links between the graph.
+
+This will collapse nodes together which have circular dependencies found inside directories listed in `circular_dependency_allow_list` to a common ancestor. The output will contain all of the final nodes, along with which sets of source nodes were collapsed into them, and their dependencies.
 
 #### System driver: print-build
 This will print out all of the build files, performing any last application of directives as necessary
@@ -125,7 +127,8 @@ Each target language is configured using a JSON file, for example `build_tools/l
       },
       "main_roots": ["src/main/python"],
       "test_roots": ["src/test/python"],
-      "path_directives": []
+      "path_directives": [],
+      "circular_dependency_allow_list": ["src/main/python/com/kitchensink"],
     }
   }
 }
