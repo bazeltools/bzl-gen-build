@@ -493,7 +493,7 @@ impl GraphState {
                             
                             return Err(anyhow::anyhow!("Circular dependency found in the package {}.
   {}
-  Resolve the cycle, or allow the cycle this by adding kitchen_sink_prefixes in the module config JSON.",
+  Resolve the cycle, or opt in to collapsing this into a higher-level build target by adding kitchen_sink_prefixes in the module config JSON.",
                                 node_label,
                                 cycle_nodes.iter().map(|n| self.get_node_label(n).unwrap_or_default()).collect::<Vec<_>>().join(", ")
                             ));
