@@ -17,6 +17,9 @@ pub struct ModuleConfig {
 
     #[serde(default)]
     pub test_globs: Vec<String>,
+
+    #[serde(default)]
+    pub circular_dependency_allow_list: Vec<String>,
 }
 
 impl ModuleConfig {

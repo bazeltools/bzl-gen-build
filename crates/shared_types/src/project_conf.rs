@@ -174,6 +174,7 @@ mod tests {
                         main_roots: vec!["src/main/python".to_string()],
                         test_roots: vec!["src/test/python".to_string()],
                         test_globs: vec![],
+                        circular_dependency_allow_list: vec![],
                     }
                 )]),
                 includes: vec![],

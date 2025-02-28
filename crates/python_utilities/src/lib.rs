@@ -3,7 +3,7 @@ use rustpython_parser::{ast, Parse};
 
 pub mod ast_builder;
 pub mod ast_printer;
-use ast_printer::{WritingBuffer, emit_body};
+use ast_printer::{emit_body, WritingBuffer};
 
 #[derive(PartialEq)]
 pub struct PythonProgram {

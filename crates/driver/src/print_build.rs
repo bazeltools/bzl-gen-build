@@ -1,5 +1,8 @@
 use std::{
-    cmp::Ordering, collections::{HashMap, HashSet}, path::{Path, PathBuf}, sync::Arc
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use crate::{
@@ -35,22 +38,26 @@ enum MaybeLabel {
         package_name: Vec<String>,
         rule_name: String,
     },
-    Relative { rule_name: String },
+    Relative {
+        rule_name: String,
+    },
     // if we can't parse it into a valid label, treat it as a string
-    JustString(String)
+    JustString(String),
 }
 
 impl MaybeLabel {
     fn from_str(s: &str) -> MaybeLabel {
         if !(s.contains(':') || s.contains('/') || s.contains('@')) {
-          return Self::JustString(s.to_string())
+            return Self::JustString(s.to_string());
         }
 
         let workspace: Option<String>;
         let rest: &str;
 
         if s.starts_with(':') {
-          return MaybeLabel::Relative { rule_name: s[1..].to_string() };
+            return MaybeLabel::Relative {
+                rule_name: s[1..].to_string(),
+            };
         } else if s.starts_with('@') {
             let s1 = &s[1..];
             if let Some(i) = s1.find("//") {
@@ -113,67 +120,80 @@ impl MaybeLabel {
     }
 
     fn to_string(self) -> String {
-      match self {
-          MaybeLabel::Label {
-              workspace,
-              package_name,
-              rule_name,
-          } => {
-              let mut label = String::new();
+        match self {
+            MaybeLabel::Label {
+                workspace,
+                package_name,
+                rule_name,
+            } => {
+                let mut label = String::new();
 
-              // Handle workspace
-              if let Some(ws) = workspace {
-                  label.push('@');
-                  label.push_str(&ws);
-              }
+                // Handle workspace
+                if let Some(ws) = workspace {
+                    label.push('@');
+                    label.push_str(&ws);
+                }
 
-              label.push_str("//");
+                label.push_str("//");
 
-              // Join package_name components with '/'
-              let package_str = package_name.join("/");
+                // Join package_name components with '/'
+                let package_str = package_name.join("/");
 
-              label.push_str(&package_str);
+                label.push_str(&package_str);
 
-              let last_package_component = package_name.last();
+                let last_package_component = package_name.last();
 
-              // Decide whether to include the rule_name
-              if Some(&rule_name) != last_package_component || package_name.is_empty() {
-                  // Include the colon and rule_name
-                  label.push(':');
-                  label.push_str(&rule_name);
-              }
+                // Decide whether to include the rule_name
+                if Some(&rule_name) != last_package_component || package_name.is_empty() {
+                    // Include the colon and rule_name
+                    label.push(':');
+                    label.push_str(&rule_name);
+                }
 
-              label
-          }
-          MaybeLabel::JustString(s) => s,
-          MaybeLabel::Relative { rule_name } => format!(":{}", rule_name),
-      }
+                label
+            }
+            MaybeLabel::JustString(s) => s,
+            MaybeLabel::Relative { rule_name } => format!(":{}", rule_name),
+        }
     }
 
     fn to_expr(self) -> Expr {
-      ast_builder::with_constant_str(self.to_string())
+        ast_builder::with_constant_str(self.to_string())
     }
 }
 
 impl Ord for MaybeLabel {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (MaybeLabel::Label { workspace, package_name, rule_name }, MaybeLabel::Label { workspace: w1, package_name: p1, rule_name: r1 }) =>
-              (workspace, package_name, rule_name).cmp(&(w1, p1, r1))
-            ,
-            (MaybeLabel::Label { .. }, MaybeLabel::JustString(_)) =>
-              Ordering::Greater,
-            (MaybeLabel::Label { workspace: _, package_name: _, rule_name: _ }, MaybeLabel::Relative { .. }) =>
-              Ordering::Greater,
-            (MaybeLabel::JustString(_), MaybeLabel::Label { .. }) =>
-              Ordering::Less,
-            (MaybeLabel::JustString(s), MaybeLabel::Relative { rule_name }) =>
-              s.cmp(rule_name),
+            (
+                MaybeLabel::Label {
+                    workspace,
+                    package_name,
+                    rule_name,
+                },
+                MaybeLabel::Label {
+                    workspace: w1,
+                    package_name: p1,
+                    rule_name: r1,
+                },
+            ) => (workspace, package_name, rule_name).cmp(&(w1, p1, r1)),
+            (MaybeLabel::Label { .. }, MaybeLabel::JustString(_)) => Ordering::Greater,
+            (
+                MaybeLabel::Label {
+                    workspace: _,
+                    package_name: _,
+                    rule_name: _,
+                },
+                MaybeLabel::Relative { .. },
+            ) => Ordering::Greater,
+            (MaybeLabel::JustString(_), MaybeLabel::Label { .. }) => Ordering::Less,
+            (MaybeLabel::JustString(s), MaybeLabel::Relative { rule_name }) => s.cmp(rule_name),
             (MaybeLabel::JustString(a), MaybeLabel::JustString(b)) => a.cmp(b),
             (MaybeLabel::Relative { .. }, MaybeLabel::Label { .. }) => Ordering::Less,
             (MaybeLabel::Relative { rule_name }, MaybeLabel::JustString(s)) => rule_name.cmp(s),
-            (MaybeLabel::Relative { rule_name }, MaybeLabel::Relative { rule_name: r1 }) => rule_name.cmp(r1),
-
+            (MaybeLabel::Relative { rule_name }, MaybeLabel::Relative { rule_name: r1 }) => {
+                rule_name.cmp(r1)
+            }
         }
     }
 }
@@ -271,33 +291,28 @@ impl TargetEntry {
 
         kw_args.push((
             Arc::new("visibility".to_string()),
-            ast_builder::as_py_list(
-              vec![MaybeLabel::from_str(visibility).to_expr()]
-            )
+            ast_builder::as_py_list(vec![MaybeLabel::from_str(visibility).to_expr()]),
         ));
 
         for (k, v) in &self.extra_kv_pairs {
             if k == "srcs" {
-              return Err(anyhow!("srcs cannot appear in extra_kv_pairs in: {}", self.name))
+                return Err(anyhow!(
+                    "srcs cannot appear in extra_kv_pairs in: {}",
+                    self.name
+                ));
             }
-            let mut normv: Vec<MaybeLabel> = v.iter().map(|item| MaybeLabel::from_str(item)).collect();
+            let mut normv: Vec<MaybeLabel> =
+                v.iter().map(|item| MaybeLabel::from_str(item)).collect();
             normv.sort();
 
             kw_args.push((
                 Arc::new(k.clone()),
-                ast_builder::as_py_list(
-                    normv.into_iter()
-                        .map(|d| d.to_expr())
-                        .collect(),
-                ),
+                ast_builder::as_py_list(normv.into_iter().map(|d| d.to_expr()).collect()),
             ));
         }
 
         for (k, v) in &self.extra_k_strs {
-            kw_args.push((
-                Arc::new(k.clone()),
-                MaybeLabel::from_str(v).to_expr(),
-            ));
+            kw_args.push((Arc::new(k.clone()), MaybeLabel::from_str(v).to_expr()));
         }
 
         Self::sort_like_buildifier(&mut kw_args);
@@ -352,15 +367,10 @@ impl SrcType {
             }
 
             SrcType::List(files) => {
-              let mut srcs: Vec<MaybeLabel> =
-                files.iter().map(|src| MaybeLabel::from_str(&src)).collect();
-              srcs.sort();
-              ast_builder::as_py_list(
-                srcs
-                    .into_iter()
-                    .map(|e| e.to_expr())
-                    .collect()
-               )
+                let mut srcs: Vec<MaybeLabel> =
+                    files.iter().map(|src| MaybeLabel::from_str(&src)).collect();
+                srcs.sort();
+                ast_builder::as_py_list(srcs.into_iter().map(|e| e.to_expr()).collect())
             }
         }
     }
@@ -842,10 +852,7 @@ where
                     k_strs.push(("binary_refs_value".to_string(), tv.to_string()));
                 }
 
-                k_strs.push((
-                    "owning_library".to_string(),
-                    format!(":{}", lib_target),
-                ));
+                k_strs.push(("owning_library".to_string(), format!(":{}", lib_target)));
 
                 target_entries.entries.push(TargetEntry {
                     name: bin.binary_refs.binary_name.clone(),
@@ -1232,6 +1239,7 @@ mod tests {
                     main_roots: vec!["src/main/protos".to_string()],
                     test_roots: vec!["src/test/protos".to_string()],
                     test_globs: vec![],
+                    circular_dependency_allow_list: vec![],
                 },
             )]),
             includes: vec![],
@@ -1294,6 +1302,7 @@ mod tests {
                     main_roots: vec!["src/main/protos".to_string()],
                     test_roots: vec!["src/test/protos".to_string()],
                     test_globs: vec![],
+                    circular_dependency_allow_list: vec![],
                 },
             )]),
             includes: vec![],
@@ -1612,10 +1621,7 @@ scala_tests(
                 "@//missing_rule_name:",
                 MaybeLabel::JustString("@//missing_rule_name:".to_owned()),
             ),
-            (
-                "//",
-                MaybeLabel::JustString("//".to_owned()),
-            ),
+            ("//", MaybeLabel::JustString("//".to_owned())),
         ];
 
         for (input, expected) in test_cases {
