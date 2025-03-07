@@ -40,3 +40,10 @@ rm -rf $TMP_WORKING_STATE/external_files &> /dev/null || true
 run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json" \
   --no-aggregate-source \
   --append
+
+# If using WORKSPACE with pip_parse, you may need to set incompatible_generate_aliases = True.
+log "Rewriting python targets to --incompatible_generate_aliases form; @@rules_python~0.24.0~pip~pip_39_pandas// to @pip//pandas"
+
+find . -name BUILD.bazel \
+  -exec sed -i.bak 's,"@@rules_python~0.24.0~pip~pip_39_\([a-zA-Z0-9_]*\)//:pkg","@pip//\1",' {} \; \
+  -exec rm {}.bak \;

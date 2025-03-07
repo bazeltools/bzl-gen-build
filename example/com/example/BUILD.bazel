@@ -36,7 +36,7 @@ py_library(
     visibility = ["//visibility:public"],
     deps = [
         "@@//com/example:aa_proto_py",
-        "@@rules_python~0.24.0~pip~pip_39_pandas//:pkg",
+        "@pip//pandas",
     ],
 )
 
