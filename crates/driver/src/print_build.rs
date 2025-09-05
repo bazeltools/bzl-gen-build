@@ -404,8 +404,10 @@ impl TargetEntries {
         let program = self.to_ast()?;
         Ok(format!(
             "# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+
 {}
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+
 ",
             &program
         ))
