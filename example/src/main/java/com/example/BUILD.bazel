@@ -1,4 +1,5 @@
 # ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+
 filegroup(
     name = "example_files",
     srcs = glob(include = ["**/*.java"]),
@@ -17,4 +18,6 @@ java_library(
         "@@_main~maven~maven//:org_slf4j_slf4j_api",
     ],
 )
+
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+

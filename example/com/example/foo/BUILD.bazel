@@ -1,4 +1,5 @@
 # ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@rules_python//python:proto.bzl", "py_proto_library")
 
@@ -39,4 +40,6 @@ py_proto_library(
     visibility = ["//visibility:public"],
     deps = [":cc_proto"],
 )
+
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+
