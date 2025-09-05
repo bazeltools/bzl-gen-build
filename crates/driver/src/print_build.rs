@@ -406,6 +406,7 @@ impl TargetEntries {
             "# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 
 {}
+
 # ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
 
 ",
