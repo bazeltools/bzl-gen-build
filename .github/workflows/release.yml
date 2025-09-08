@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-latest, ubuntu-22.04, ubuntu-20.04]
+        os: [macos-latest, ubuntu-22.04, ubuntu-24.04]
         include:
           - os: macos-latest
             platform: macos-x86
@@ -17,9 +17,9 @@ jobs:
           - os: ubuntu-22.04
             platform: linux-ubuntu-22.04
             artifact: bzl-gen-build-linux-ubuntu-22.04
-          - os: ubuntu-20.04
-            platform: linux-ubuntu-20.04
-            artifact: bzl-gen-build-linux-ubuntu-20.04
+          - os: ubuntu-24.04
+            platform: linux-ubuntu-24.04
+            artifact: bzl-gen-build-linux-ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Protoc
@@ -64,10 +64,10 @@ jobs:
         with:
           name: bzl-gen-build-linux-ubuntu-22.04
           path: downloads
-      - name: Download linux ubuntu 20 bzl-gen-build
+      - name: Download linux ubuntu 24 bzl-gen-build
         uses: actions/download-artifact@v4
         with:
-          name: bzl-gen-build-linux-ubuntu-20.04
+          name: bzl-gen-build-linux-ubuntu-24.04
           path: downloads
       - name: Download macos bzl-gen-build
         uses: actions/download-artifact@v4
@@ -85,6 +85,6 @@ jobs:
             downloads/bzl-gen-build-macos-x86.tgz.sha256
             downloads/bzl-gen-build-linux-ubuntu-22.04.tgz
             downloads/bzl-gen-build-linux-ubuntu-22.04.tgz.sha256
-            downloads/bzl-gen-build-linux-ubuntu-20.04.tgz
-            downloads/bzl-gen-build-linux-ubuntu-20.04.tgz.sha256
+            downloads/bzl-gen-build-linux-ubuntu-24.04.tgz
+            downloads/bzl-gen-build-linux-ubuntu-24.04.tgz.sha256
         id: "automatic_releases"
