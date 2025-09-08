@@ -24,7 +24,7 @@ function log(){
 
 
 if [ "$(uname -s)" == "Linux" ]; then
-  export BZL_GEN_PLATFORM='linux-ubuntu-20.04'
+  export BZL_GEN_PLATFORM='linux-ubuntu-24.04'
   export BUILDIFIER_PLATFORM_SUFFIX="-linux-amd64"
 elif [ "$(uname -s)" == "Darwin" ]; then
   ARCH="$(uname -m)"
