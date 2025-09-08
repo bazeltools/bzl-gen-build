@@ -9,10 +9,10 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-14 # macos-15 will require dep updates; see https://github.com/bazeltools/bzl-gen-build/pull/426
             platform: macos
             jobtype: 1
-          - os: macos-latest
+          - os: macos-14 # macos-15 will require dep updates; see https://github.com/bazeltools/bzl-gen-build/pull/426
             platform: macos
             jobtype: 3
           - os: ubuntu-latest
