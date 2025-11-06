@@ -11,7 +11,7 @@ libraryDependencies += "org.typelevel" %% "cats-parse" % "1.0.0"
 libraryDependencies += "io.circe" %% "circe-core" % "0.14.6"
 libraryDependencies += "io.circe" %% "circe-parser" % "0.14.6"
 libraryDependencies += "io.circe" %% "circe-generic" % "0.14.6"
-libraryDependencies += "com.github.javaparser" % "javaparser-core" % "3.24.9"
+libraryDependencies += "com.github.javaparser" % "javaparser-core" % "3.27.1"
 
 libraryDependencies += "org.scalameta" %% "munit" % "1.0.0-M10" % Test
 libraryDependencies += "org.scalameta" %% "munit-scalacheck" % "1.0.0-M10" % Test

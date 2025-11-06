@@ -133,7 +133,7 @@ abstract class DriverApplication extends IOApp {
         IO.pure(Set.empty)
     }
 
-  private[this] def getEnv(name: String): IO[Option[String]] =
+  private[buildgen] def getEnv(name: String): IO[Option[String]] =
     IO(Option(System.getenv(name)))
 
   private[this] def isValidTld(s: String): Boolean =
