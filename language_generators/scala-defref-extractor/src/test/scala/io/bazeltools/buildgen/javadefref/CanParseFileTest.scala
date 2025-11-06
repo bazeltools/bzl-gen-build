@@ -124,7 +124,8 @@ public class Duck {
     """
     val expectedSymbols = Symbols(
       defs = SortedSet(Entity.dotted("com.ducks.Duck")),
-      refs =  SortedSet(Entity.dotted("String"), Entity.dotted("com.ducks.String")),
+      refs =
+        SortedSet(Entity.dotted("String"), Entity.dotted("com.ducks.String")),
       bzl_gen_build_commands = SortedSet()
     )
     assertParse(simpleContent, expectedSymbols)
