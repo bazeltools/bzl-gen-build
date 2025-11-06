@@ -30,7 +30,7 @@ case class JavaSourceEntityExtractor(specialTlds: Set[String]) {
     val config = new ParserConfiguration();
 
     config.setLexicalPreservationEnabled(false)
-    config.setLanguageLevel(ParserConfiguration.LanguageLevel.RAW)
+    config.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17)
     new JavaParser(config)
   }
 
