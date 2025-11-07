@@ -72,7 +72,7 @@ jobs:
       - name: Download macos bzl-gen-build
         uses: actions/download-artifact@v4
         with:
-          name: bzl-gen-build-macos-x86
+          name: bzl-gen-build-macos-arm64
           path: downloads
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
@@ -81,8 +81,8 @@ jobs:
           prerelease: false
           title: "Auto generated release for bzl-gen-build"
           files: |
-            downloads/bzl-gen-build-macos-x86.tgz
-            downloads/bzl-gen-build-macos-x86.tgz.sha256
+            downloads/bzl-gen-build-macos-arm64.tgz
+            downloads/bzl-gen-build-macos-arm64.tgz.sha256
             downloads/bzl-gen-build-linux-ubuntu-22.04.tgz
             downloads/bzl-gen-build-linux-ubuntu-22.04.tgz.sha256
             downloads/bzl-gen-build-linux-ubuntu-24.04.tgz
