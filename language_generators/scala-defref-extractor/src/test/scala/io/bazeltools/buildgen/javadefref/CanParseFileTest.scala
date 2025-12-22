@@ -8,7 +8,7 @@ import cats.effect.unsafe.implicits.global
 class CanParseFileTest extends AnyFunSuite {
 
   def assertParse(str: String, expected: Symbols) = {
-    val got = JavaSourceEntityExtractor(Set.empty).extract(str).unsafeRunSync()
+    val got = JavaSourceEntityExtractor.extract(str).unsafeRunSync()
     assert(got === expected)
   }
 
