@@ -189,7 +189,7 @@ In some situations, like for Protocol Buffer schemas, we want to generate second
 
 ### Heuristics
 
-Wildcard imports in Java and Scala can be expensive to resolve, since every subsequent import might be relative to the previous wildcard.
+Wildcard imports in Scala can be expensive to resolve, since every subsequent import might be relative to the previous wildcard.
 
 As an optimization, setting the environment variable `BZL_GEN_SPECIAL_TLDS` to a comma-separated list will tell the driver program to assume any import rooted at one of those names is not relative. For example:
 
@@ -198,6 +198,8 @@ export BZL_GEN_SPECIAL_TLDS=com,net,org
 ```
 
 The names must match the regular expression `^[a-z]+$`.
+
+Java on the other hand, imports are root basis, don't need this optimization.
 
 ### Extracting definitions from 3rdparty libraries
 
