@@ -162,6 +162,12 @@ function run_system_apps() {
             GLOBAL_FLAG="$GLOBAL_FLAG --append";
             shift
         fi
+
+        if [[ "$1" == "--overwrite" ]]; then
+            GLOBAL_FLAG="$GLOBAL_FLAG --overwrite $2";
+            shift
+            shift
+        fi
     fi
 
     set -ex

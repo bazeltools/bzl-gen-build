@@ -10,7 +10,6 @@ else
     REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd ../../../ && pwd )"
 fi
 
-source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/delete_build_files.sh"
 source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/regenerate_protos_build_files.sh"
 source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/regenerate_python_build_files.sh"
 source "$REPO_ROOT/build_tools/lang_support/create_lang_build_files/regenerate_jvm_build_files.sh"

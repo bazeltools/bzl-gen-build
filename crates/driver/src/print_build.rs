@@ -400,17 +400,22 @@ impl TargetEntries {
         ))
     }
 
-    pub fn emit_build_file(&self) -> Result<String> {
+    /// When `tag` is Some (e.g. "PY"), uses markers BZL_GEN_BUILD_<tag>_GENERATED_CODE for section overwrite.
+    pub fn emit_build_file(&self, tag: Option<&str>) -> Result<String> {
         let program = self.to_ast()?;
+        let marker = match tag {
+            Some(t) => format!("BZL_GEN_BUILD_{}_GENERATED_CODE", t),
+            None => "BZL_GEN_BUILD_GENERATED_CODE".to_string(),
+        };
         Ok(format!(
-            "# ---- BEGIN BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+            "# ---- BEGIN {} ---- no_hash
 
 {}
 
-# ---- END BZL_GEN_BUILD_GENERATED_CODE ---- no_hash
+# ---- END {} ---- no_hash
 
 ",
-            &program
+            marker, &program, marker
         ))
     }
 
@@ -1015,6 +1020,44 @@ where
     Ok(t)
 }
 
+/// Replaces or appends the tagged section in existing BUILD file content.
+/// Tag is used in markers: BEGIN/END BZL_GEN_BUILD_<tag>_GENERATED_CODE.
+fn replace_tag_section(existing: &str, tag: &str, new_block: &str) -> String {
+    let begin_marker = format!(
+        "# ---- BEGIN BZL_GEN_BUILD_{}_GENERATED_CODE ---- no_hash",
+        tag
+    );
+    let end_marker = format!(
+        "# ---- END BZL_GEN_BUILD_{}_GENERATED_CODE ---- no_hash",
+        tag
+    );
+    if let Some(begin_pos) = existing.find(&begin_marker) {
+        let after_begin = begin_pos + begin_marker.len();
+        if let Some(end_pos) = existing[after_begin..].find(&end_marker) {
+            let end_pos = after_begin + end_pos + end_marker.len();
+            let mut out = String::with_capacity(
+                existing.len() - (end_pos - begin_pos) + new_block.len(),
+            );
+            out.push_str(&existing[..begin_pos]);
+            out.push_str(new_block.trim_end());
+            if !new_block.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(&existing[end_pos..]);
+            return out;
+        }
+    }
+    let mut out = existing.to_string();
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(new_block.trim_end());
+    if !new_block.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
 // Performs the side effect of writing BUILD file
 async fn print_file(
     opt: &'static Opt,
@@ -1037,9 +1080,20 @@ async fn print_file(
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
-            tokio::fs::write(sub_target.clone(), t.emit_build_file()?)
-                .await
-                .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            if let Some(tag) = opt.overwrite.as_deref() {
+                let existing = tokio::fs::read_to_string(&sub_target)
+                    .await
+                    .unwrap_or_default();
+                let new_block = t.emit_build_file(Some(tag))?;
+                let content = replace_tag_section(&existing, tag, &new_block);
+                tokio::fs::write(sub_target.clone(), content)
+                    .await
+                    .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            } else {
+                tokio::fs::write(sub_target.clone(), t.emit_build_file(None)?)
+                    .await
+                    .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            }
             Ok(0)
         },
     )
@@ -1053,17 +1107,28 @@ async fn print_file(
         &mut emitted_files,
         |sub_target: PathBuf, t: TargetEntries| async move {
             let _handle = concurrent_io_operations.acquire().await?;
-            tokio::fs::write(sub_target.clone(), t.emit_build_file()?)
-                .await
-                .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            if let Some(tag) = opt.overwrite.as_deref() {
+                let existing = tokio::fs::read_to_string(&sub_target)
+                    .await
+                    .unwrap_or_default();
+                let new_block = t.emit_build_file(Some(tag))?;
+                let content = replace_tag_section(&existing, tag, &new_block);
+                tokio::fs::write(sub_target.clone(), content)
+                    .await
+                    .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            } else {
+                tokio::fs::write(sub_target.clone(), t.emit_build_file(None)?)
+                    .await
+                    .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
+            }
             Ok(0)
         },
     )
     .await?;
     let t = TargetEntries::combine(t1, t2);
     let handle = concurrent_io_operations.acquire().await?;
-    let write_mode = WriteMode::new(opt.append);
-    match write_mode {
+    let write_mode = WriteMode::new(opt.append, opt.overwrite.clone());
+    match &write_mode {
         WriteMode::Append => {
             let mut file = tokio::fs::OpenOptions::new()
                 .write(true)
@@ -1073,7 +1138,7 @@ async fn print_file(
                 .await?;
 
             if !t.entries.is_empty() {
-                file.write(t.emit_build_file()?.as_bytes())
+                file.write(t.emit_build_file(None)?.as_bytes())
                     .await
                     .with_context(|| {
                         format!("Attempting to write file data to {:?}", target_file)
@@ -1088,12 +1153,24 @@ async fn print_file(
                 .open(&target_file)
                 .await?;
             if !t.entries.is_empty() {
-                file.write_all(t.emit_build_file()?.as_bytes())
+                file.write_all(t.emit_build_file(None)?.as_bytes())
                     .await
                     .with_context(|| {
                         format!("Attempting to write file data to {:?}", target_file)
                     })?;
             }
+        }
+        WriteMode::OverwriteTag(tag) => {
+            let existing = tokio::fs::read_to_string(&target_file)
+                .await
+                .unwrap_or_default();
+            let new_block = t.emit_build_file(Some(tag))?;
+            let content = replace_tag_section(&existing, tag, &new_block);
+            tokio::fs::write(&target_file, content)
+                .await
+                .with_context(|| {
+                    format!("Attempting to write file data to {:?}", target_file)
+                })?;
         }
     }
     drop(handle);
@@ -1184,9 +1261,9 @@ pub async fn print_build(
         }
     }
 
-    // These files are old and not updated..
-    let write_mode = WriteMode::new(opt.append);
-    if write_mode == WriteMode::Overwrite {
+    // These files are old and not updated. Skip when using OverwriteTag (multi-language: other tags remain).
+    let write_mode = WriteMode::new(opt.append, opt.overwrite.clone());
+    if matches!(write_mode, WriteMode::Overwrite) {
         for f in current_files {
             println!("Deleting no longer used build file of: {:?}", f);
             std::fs::remove_file(&f)?;
@@ -1204,14 +1281,18 @@ mod tests {
     use crate::Commands::PrintBuild;
     use std::collections::BTreeMap;
 
-    fn example_opt(no_aggregate_source: bool, write_mode: WriteMode) -> Opt {
+    fn example_opt(no_aggregate_source: bool, write_mode: &WriteMode) -> Opt {
         Opt {
             input_path: PathBuf::new(),
             working_directory: PathBuf::new(),
             concurrent_io_operations: 8,
             cache_path: PathBuf::new(),
             no_aggregate_source: no_aggregate_source,
-            append: write_mode == WriteMode::Append,
+            append: write_mode == &WriteMode::Append,
+            overwrite: match write_mode {
+                WriteMode::OverwriteTag(t) => Some(t.clone()),
+                _ => None,
+            },
             command: PrintBuild(PrintBuildArgs {
                 graph_data: PathBuf::new(),
             }),
@@ -1418,7 +1499,7 @@ py_proto_library(
         write_mode: WriteMode,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut emitted_files: Vec<PathBuf> = Vec::default();
-        let opt = Box::leak(Box::new(example_opt(no_aggregate_source, write_mode)));
+        let opt = Box::leak(Box::new(example_opt(no_aggregate_source, &write_mode)));
         let boxed_project_conf = Box::leak(Box::new(project_conf));
         let target_entries = generate_targets(
             opt,
@@ -1431,7 +1512,7 @@ py_proto_library(
         )
         .await?;
         assert_eq!(target_entries.entries.len(), expected_target_count);
-        let generated_s = target_entries.emit_build_file()?;
+        let generated_s = target_entries.emit_build_file(None)?;
         let actual_parsed = PythonProgram::parse(generated_s.as_str(), "tmp.py")?;
         let expected_parsed = {
             let parsed = PythonProgram::parse(expected_build_file, "tmp.py").unwrap();
@@ -1445,6 +1526,23 @@ py_proto_library(
             actual_parsed
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_replace_tag_section() {
+        let tag = "PY";
+        let new_block = "# ---- BEGIN BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\n\npy_library(\n    name = \"x\",\n)\n\n# ---- END BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\n";
+        // Empty file: append
+        let out = replace_tag_section("", tag, new_block);
+        assert!(out.contains("py_library("));
+        assert!(out.contains("BEGIN BZL_GEN_BUILD_PY"));
+        // Existing section: replace
+        let existing = "other stuff\n# ---- BEGIN BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\n\nold content\n\n# ---- END BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\nrest";
+        let out2 = replace_tag_section(existing, tag, new_block);
+        assert!(!out2.contains("old content"));
+        assert!(out2.contains("py_library("));
+        assert!(out2.contains("other stuff"));
+        assert!(out2.contains("rest"));
     }
 
     #[test]
@@ -1471,7 +1569,7 @@ scala_tests(
         entries.push(make_target_entry("scala_extractor"));
         let target_entries = TargetEntries { entries };
 
-        let generated_s = target_entries.emit_build_file().unwrap();
+        let generated_s = target_entries.emit_build_file(None).unwrap();
 
         let parsed_from_generated_string =
             PythonProgram::parse(generated_s.as_str(), "tmp.py").unwrap();

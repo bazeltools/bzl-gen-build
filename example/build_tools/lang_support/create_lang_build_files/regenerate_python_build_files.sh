@@ -16,7 +16,7 @@ set -x
 
 bazel query '@pip//...' | grep "@pip.*:pkg" > $TMP_WORKING_STATE/external_targets
 
-bazel query 'kind("py", com/...)' > /dev/null
+bazel query 'kind("py_proto_library", com/...)' > /dev/null
 cat $OUTPUT_BASE/command.log | grep '//' >> $TMP_WORKING_STATE/external_targets
 
 CACHE_KEY="$(generate_cache_key $TMP_WORKING_STATE/external_targets $REPO_ROOT/WORKSPACE $REPO_ROOT/requirements_lock_3_9.txt)"
@@ -39,7 +39,7 @@ rm -rf $TMP_WORKING_STATE/external_files &> /dev/null || true
 
 run_system_apps "build_tools/lang_support/create_lang_build_files/bazel_${GEN_FLAVOR}_modules.json" \
   --no-aggregate-source \
-  --append
+  --overwrite PY
 
 # If using WORKSPACE with pip_parse, you may need to set incompatible_generate_aliases = True.
 log "Rewriting python targets to --incompatible_generate_aliases form; @@rules_python~0.24.0~pip~pip_39_pandas// to @pip//pandas"

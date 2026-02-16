@@ -65,19 +65,28 @@ pub fn default_auto() -> TargetNameStrategy {
     TargetNameStrategy::Auto
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WriteMode {
-    /// automatic default
-    #[default]
+    /// overwrite entire build file
     Overwrite,
-    /// use the file stem (file name without the extension) of the source code
+    /// append generated block to existing file
     Append,
+    /// replace only the section between BEGIN/END BZL_GEN_BUILD_<tag>_GENERATED_CODE (multi-language safe)
+    OverwriteTag(String),
+}
+
+impl Default for WriteMode {
+    fn default() -> Self {
+        WriteMode::Overwrite
+    }
 }
 
 impl WriteMode {
-    pub fn new(append: bool) -> WriteMode {
-        if append {
+    pub fn new(append: bool, overwrite_tag: Option<String>) -> WriteMode {
+        if let Some(tag) = overwrite_tag {
+            WriteMode::OverwriteTag(tag)
+        } else if append {
             WriteMode::Append
         } else {
             WriteMode::Overwrite
