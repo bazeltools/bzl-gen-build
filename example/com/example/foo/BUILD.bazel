@@ -1,7 +1,10 @@
-# ---- BEGIN BZL_GEN_BUILD_PROTO_GENERATED_CODE ---- no_hash
+# ---- BEGIN BZL_GEN_BUILD_LOAD_PROTO_GENERATED_CODE ---- no_hash
 
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@rules_python//python:proto.bzl", "py_proto_library")
+
+# ---- END BZL_GEN_BUILD_LOAD_PROTO_GENERATED_CODE ---- no_hash
+# ---- BEGIN BZL_GEN_BUILD_PROTO_GENERATED_CODE ---- no_hash
 
 proto_library(
     name = "bb_proto",

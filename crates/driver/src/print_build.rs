@@ -401,6 +401,7 @@ impl TargetEntries {
     }
 
     /// When `tag` is Some (e.g. "PY"), uses markers BZL_GEN_BUILD_<tag>_GENERATED_CODE for section overwrite.
+    /// With a tag, load statements are emitted in a separate block (see emit_build_file_tagged).
     pub fn emit_build_file(&self, tag: Option<&str>) -> Result<String> {
         let program = self.to_ast()?;
         let marker = match tag {
@@ -419,8 +420,45 @@ impl TargetEntries {
         ))
     }
 
+    /// Emits two blocks for tagged overwrite: load block (BZL_GEN_BUILD_LOAD_<tag>_GENERATED_CODE)
+    /// and targets block (BZL_GEN_BUILD_<tag>_GENERATED_CODE). Keeps load statements at top for Buildifier.
+    pub fn emit_build_file_tagged(&self, tag: &str) -> Result<(String, String)> {
+        let (load_program, targets_program) = self.to_ast_split()?;
+        let load_marker = format!("BZL_GEN_BUILD_LOAD_{}_GENERATED_CODE", tag);
+        let load_block = format!(
+            "# ---- BEGIN {} ---- no_hash
+
+{}
+
+# ---- END {} ---- no_hash
+
+",
+            load_marker, &load_program, load_marker
+        );
+        let targets_marker = format!("BZL_GEN_BUILD_{}_GENERATED_CODE", tag);
+        let targets_block = format!(
+            "# ---- BEGIN {} ---- no_hash
+
+{}
+
+# ---- END {} ---- no_hash
+
+",
+            targets_marker, &targets_program, targets_marker
+        );
+        Ok((load_block, targets_block))
+    }
+
     pub fn to_ast(&self) -> Result<PythonProgram> {
-        let mut program: Vec<Stmt> = Vec::default();
+        let (load_program, targets_program) = self.to_ast_split()?;
+        let mut body = load_program.body;
+        body.extend(targets_program.body);
+        Ok(PythonProgram { body })
+    }
+
+    /// Splits AST into load statements (for LOAD_<tag> block) and target calls (for <tag> block).
+    fn to_ast_split(&self) -> Result<(PythonProgram, PythonProgram)> {
+        let mut load_stmts: Vec<Stmt> = Vec::default();
         let mut all_load_statements: HashMap<Arc<String>, Vec<Arc<String>>> = HashMap::default();
 
         for entry in self.entries.iter() {
@@ -437,14 +475,18 @@ impl TargetEntries {
         all_load_statements.sort();
 
         for (load_from, load_v) in all_load_statements {
-            program.push(TargetEntries::load_statement(load_from, load_v));
+            load_stmts.push(TargetEntries::load_statement(load_from, load_v));
         }
 
+        let mut target_stmts: Vec<Stmt> = Vec::default();
         for e in self.entries.iter() {
-            program.push(e.emit_build_function_call()?);
+            target_stmts.push(e.emit_build_function_call()?);
         }
 
-        Ok(PythonProgram { body: program })
+        Ok((
+            PythonProgram { body: load_stmts },
+            PythonProgram { body: target_stmts },
+        ))
     }
 
     fn combine(t1: TargetEntries, t2: TargetEntries) -> TargetEntries {
@@ -1022,7 +1064,13 @@ where
 
 /// Replaces or appends the tagged section in existing BUILD file content.
 /// Tag is used in markers: BEGIN/END BZL_GEN_BUILD_<tag>_GENERATED_CODE.
-fn replace_tag_section(existing: &str, tag: &str, new_block: &str) -> String {
+/// When section is missing: if `insert_at_start_if_missing` then prepend (for load block), else append.
+fn replace_tag_section(
+    existing: &str,
+    tag: &str,
+    new_block: &str,
+    insert_at_start_if_missing: bool,
+) -> String {
     let begin_marker = format!(
         "# ---- BEGIN BZL_GEN_BUILD_{}_GENERATED_CODE ---- no_hash",
         tag
@@ -1047,15 +1095,22 @@ fn replace_tag_section(existing: &str, tag: &str, new_block: &str) -> String {
             return out;
         }
     }
-    let mut out = existing.to_string();
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
+    let trimmed = new_block.trim_end();
+    let block_with_newline = if trimmed.ends_with('\n') {
+        trimmed.to_string()
+    } else {
+        format!("{}\n", trimmed)
+    };
+    if insert_at_start_if_missing {
+        format!("{}{}", block_with_newline, existing)
+    } else {
+        let mut out = existing.to_string();
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(&block_with_newline);
+        out
     }
-    out.push_str(new_block.trim_end());
-    if !new_block.ends_with('\n') {
-        out.push('\n');
-    }
-    out
 }
 
 // Performs the side effect of writing BUILD file
@@ -1084,8 +1139,18 @@ async fn print_file(
                 let existing = tokio::fs::read_to_string(&sub_target)
                     .await
                     .unwrap_or_default();
-                let new_block = t.emit_build_file(Some(tag))?;
-                let content = replace_tag_section(&existing, tag, &new_block);
+                let (load_block, targets_block) = t.emit_build_file_tagged(tag)?;
+                let content = replace_tag_section(
+                    &replace_tag_section(
+                        &existing,
+                        &format!("LOAD_{}", tag),
+                        &load_block,
+                        true,
+                    ),
+                    tag,
+                    &targets_block,
+                    false,
+                );
                 tokio::fs::write(sub_target.clone(), content)
                     .await
                     .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
@@ -1111,8 +1176,18 @@ async fn print_file(
                 let existing = tokio::fs::read_to_string(&sub_target)
                     .await
                     .unwrap_or_default();
-                let new_block = t.emit_build_file(Some(tag))?;
-                let content = replace_tag_section(&existing, tag, &new_block);
+                let (load_block, targets_block) = t.emit_build_file_tagged(tag)?;
+                let content = replace_tag_section(
+                    &replace_tag_section(
+                        &existing,
+                        &format!("LOAD_{}", tag),
+                        &load_block,
+                        true,
+                    ),
+                    tag,
+                    &targets_block,
+                    false,
+                );
                 tokio::fs::write(sub_target.clone(), content)
                     .await
                     .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
@@ -1164,8 +1239,18 @@ async fn print_file(
             let existing = tokio::fs::read_to_string(&target_file)
                 .await
                 .unwrap_or_default();
-            let new_block = t.emit_build_file(Some(tag))?;
-            let content = replace_tag_section(&existing, tag, &new_block);
+            let (load_block, targets_block) = t.emit_build_file_tagged(tag)?;
+            let content = replace_tag_section(
+                &replace_tag_section(
+                    &existing,
+                    &format!("LOAD_{}", tag),
+                    &load_block,
+                    true,
+                ),
+                tag,
+                &targets_block,
+                false,
+            );
             tokio::fs::write(&target_file, content)
                 .await
                 .with_context(|| {
@@ -1533,12 +1618,12 @@ py_proto_library(
         let tag = "PY";
         let new_block = "# ---- BEGIN BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\n\npy_library(\n    name = \"x\",\n)\n\n# ---- END BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\n";
         // Empty file: append
-        let out = replace_tag_section("", tag, new_block);
+        let out = replace_tag_section("", tag, new_block, false);
         assert!(out.contains("py_library("));
         assert!(out.contains("BEGIN BZL_GEN_BUILD_PY"));
         // Existing section: replace
         let existing = "other stuff\n# ---- BEGIN BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\n\nold content\n\n# ---- END BZL_GEN_BUILD_PY_GENERATED_CODE ---- no_hash\nrest";
-        let out2 = replace_tag_section(existing, tag, new_block);
+        let out2 = replace_tag_section(existing, tag, new_block, false);
         assert!(!out2.contains("old content"));
         assert!(out2.contains("py_library("));
         assert!(out2.contains("other stuff"));
