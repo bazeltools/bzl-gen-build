@@ -4,9 +4,24 @@ module(
     compatibility_level = 1,
 )
 
-bazel_dep(name = "bazel_skylib", version = "1.4.1")
-bazel_dep(name = "rules_python", version = "0.24.0")
-bazel_dep(name = "rules_jvm_external", version = "4.5")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "rules_java", version = "7.12.2")
+bazel_dep(name = "rules_license", version = "1.0.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "rules_python", version = "1.8.1")
+bazel_dep(name = "rules_jvm_external", version = "6.8")
+bazel_dep(name = "rules_proto", version = "7.1.0")
+bazel_dep(name = "toolchains_protoc", version = "0.6.1")
+bazel_dep(name = "build_stack_rules_proto", version = "4.2.0")
+bazel_dep(name = "protobuf", version = "30.2")
+
+# Override protobuf to 30.2 since toolchains_protoc doesn't support protoc v32.0 yet
+# build_stack_rules_proto@4.2.0 declares protobuf@32.0, but we override it to avoid
+# --option_dependencies flag requirement that protoc v25.8 doesn't support
+single_version_override(
+    module_name = "protobuf",
+    version = "30.2",
+)
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
@@ -18,8 +33,9 @@ pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
     hub_name = "pip",
     requirements_lock = "//:requirements_lock_3_9.txt",
+    python_version = "3.9",
 )
-use_repo(pip, "pip", "pip_39")
+use_repo(pip, "pip")
 
 maven = use_extension(":maven.bzl", "maven")
 maven.install(
@@ -29,3 +45,24 @@ maven.install(
     ],
 )
 use_repo(maven, "maven")
+
+## Protobuf
+
+protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
+protoc.toolchain(
+    # Use a distinct name so we don't shadow the protobuf module's @com_google_protobuf
+    # (which provides protobuf_deps.bzl). Bazel 8 repo mapping fails otherwise.
+    # For well-known-types use @protobuf_wkt//:any_proto etc. if needed.
+    google_protobuf = "protobuf_wkt",
+    version = "v25.8",
+)
+use_repo(protoc, "protobuf_wkt", "toolchains_protoc_hub")
+
+register_toolchains("@toolchains_protoc_hub//:all")
+
+# Load prebuilt protoc binaries for Python and Java proto compilation
+prebuilt_protoc_ext = use_extension("//build_tools/lang_support/proto:repositories.bzl", "prebuilt_protoc_ext")
+use_repo(prebuilt_protoc_ext, "prebuilt_protoc_linux", "prebuilt_protoc_linux_python", "prebuilt_protoc_osx", "prebuilt_protoc_osx_python")
+
+# Register stackb rules_proto toolchain (build_stack_rules_proto is loaded via bazel_dep above)
+register_toolchains("@build_stack_rules_proto//toolchain:standard")
