@@ -15,7 +15,7 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         "@@//com/example:aa_proto_java",
-        "@maven//:org_slf4j_slf4j_api",
+        "@@+maven+maven//:org_slf4j_slf4j_api",
     ],
 )
 

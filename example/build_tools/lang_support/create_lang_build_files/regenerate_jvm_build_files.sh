@@ -20,6 +20,11 @@ cat "$OUTPUT_BASE/command.log" | grep '@maven' > "$TMP_WORKING_STATE/external_ta
 bazel query 'kind("java|scala", com/...)' > /dev/null
 cat "$OUTPUT_BASE/command.log" | grep '//' >> "$TMP_WORKING_STATE/external_targets"
 
+# Bzlmod may expose canonical repo names (e.g. @@_main~maven~maven//). Normalize to @maven//
+# so generated BUILD deps resolve (use_repo(maven, "maven") makes the repo visible as "maven").
+sed 's|@@_main~maven~maven//|@maven//|g' "$TMP_WORKING_STATE/external_targets" |
+sed 's|@@+main+maven//|@maven//|g' > "$TMP_WORKING_STATE/external_targets.tmp"
+mv "$TMP_WORKING_STATE/external_targets.tmp" "$TMP_WORKING_STATE/external_targets"
 
 cat "$TMP_WORKING_STATE/external_targets"
 

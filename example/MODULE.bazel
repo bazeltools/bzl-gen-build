@@ -66,3 +66,11 @@ use_repo(prebuilt_protoc_ext, "prebuilt_protoc_linux", "prebuilt_protoc_linux_py
 
 # Register stackb rules_proto toolchain (build_stack_rules_proto is loaded via bazel_dep above)
 register_toolchains("@build_stack_rules_proto//toolchain:standard")
+
+# This is just a placeholder. The build regeneration scripts will always override this
+# via a command line parameter.
+bazel_dep(name = "external_build_tooling_gen")
+local_path_override(
+    module_name = "external_build_tooling_gen",
+    path = "build_tools/bazel_rules/jar_scanner/external_build_tooling_gen",
+)
