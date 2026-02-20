@@ -46,8 +46,15 @@ cp ${RUST_TARGET_DIR}/bzl_gen_jarscanner $PREPARE_ALL_OUTPUT_DIR/jarscanner
 
 echo "workspace(name = \"external_build_tooling_gen\")" > $PREPARE_ALL_OUTPUT_DIR/WORKSPACE
 
+cat > $PREPARE_ALL_OUTPUT_DIR/MODULE.bazel <<'EOF'
+module(
+    name = "external_build_tooling_gen",
+    version = "0.0.0",
+)
+EOF
+
 cat > $PREPARE_ALL_OUTPUT_DIR/BUILD.bazel <<EOF
-exports_files(["WORKSPACE", "python-entity-extractor", "jarscanner"])
+exports_files(["WORKSPACE", "MODULE.bazel", "python-entity-extractor", "jarscanner"])
 EOF
 
 

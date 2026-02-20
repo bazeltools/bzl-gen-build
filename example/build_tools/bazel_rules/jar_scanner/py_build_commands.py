@@ -1,3 +1,8 @@
+"""Generates a bash script that runs jar_scanner aspect over external JAR targets.
+
+The script passes --override_module=external_build_tooling_gen=$BZL_GEN_BUILD_TOOLS_PATH
+so the real jarscanner binary is used. The default is a placeholder module; the override is required at build time.
+"""
 import sys
 import json
 import os
@@ -25,7 +30,7 @@ set -x
 bazel build {targets} \
   --aspects build_tools/bazel_rules/jar_scanner/rule.bzl%jar_scanner_aspect \
   --output_groups=+jar_scanner_out \
-  --override_repository=external_build_tooling_gen=${{BZL_GEN_BUILD_TOOLS_PATH}} \
+  --override_module=external_build_tooling_gen=${{BZL_GEN_BUILD_TOOLS_PATH}} \
   --show_result=1000000 2> /tmp/cmd_out
 RET=$?
 set +x

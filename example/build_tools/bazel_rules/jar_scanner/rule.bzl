@@ -6,10 +6,14 @@ def _jar_scanner_impl(target, ctx):
     label = str(target.label)
     name = target.label.name
     if ((not target.label.workspace_name.startswith("_main~maven~maven")) and
+        (not target.label.workspace_name.startswith("+maven+maven")) and
         (not label.endswith("proto_java")) and
         (not label.endswith("proto_scala"))):
         return []
 
+    if JavaInfo not in target:
+        return []
+    
     # Make sure the rule has a srcs attribute.
     out = ctx.actions.declare_file("%s_jar_scanner.json" % (target.label.name))
     files = ctx.rule.files
@@ -23,9 +27,9 @@ def _jar_scanner_impl(target, ctx):
         for jar in info.files.to_list():
             if jar.basename.endswith("-src.jar"):
                 None
-            elif (jar.basename == "scala-reflect.jar") and (not label.startswith("@@_main~maven~maven//:org_scala_lang__scala_reflect")):
+            elif (jar.basename == "scala-reflect.jar") and (not label.startswith("@@_main~maven~maven//:org_scala_lang__scala_reflect")) and (not label.startswith("@@+maven+maven//:org_scala_lang__scala_reflect")):
                 None
-            elif ("scalapb-runtime" in jar.basename) and (not label.startswith("@@_main~maven~maven//:com_thesamet_scalapb_scalapb_runtime")):
+            elif ("scalapb-runtime" in jar.basename) and (not label.startswith("@@_main~maven~maven//:com_thesamet_scalapb_scalapb_runtime")) and (not label.startswith("@@+maven+maven//:com_thesamet_scalapb_scalapb_runtime")):
                 None
             else:
                 all_jars.append(jar)
@@ -53,7 +57,7 @@ def _jar_scanner_impl(target, ctx):
 
     short = all_jars[0].short_path
     prefix_len = 0
-    if label.startswith("@jvm"):
+    if label.startswith("@jvm") or label.startswith("@@+maven+maven//"):
         len_workspace = len(target.label.workspace_name)
         prefix_len = len_workspace + 1  # workspace + /
     if short.startswith("../"):
@@ -75,6 +79,7 @@ def _jar_scanner_impl(target, ctx):
         executable = ctx.files._jarscanner_exe[0],
         mnemonic = "JarScanner",
         arguments = [args],
+        execution_requirements = {"no-sandbox": "1"},
     )
     return [OutputGroupInfo(jar_scanner_out = depset([out]))]
 

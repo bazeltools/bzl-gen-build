@@ -1,0 +1,5 @@
+# Placeholder module. Override with --override_module=external_build_tooling_gen=/path when building.
+module(
+    name = "external_build_tooling_gen",
+    version = "0.0.0",
+)
