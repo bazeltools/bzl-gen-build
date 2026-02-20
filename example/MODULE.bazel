@@ -25,15 +25,15 @@ single_version_override(
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
-    python_version = "3.9",
+    python_version = "3.10",
 )
-use_repo(python, "python_3_9", "python_versions")
+use_repo(python, "python_3_10", "python_versions")
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
     hub_name = "pip",
-    requirements_lock = "//:requirements_lock_3_9.txt",
-    python_version = "3.9",
+    requirements_lock = "//:requirements_lock_3_10.txt",
+    python_version = "3.10",
 )
 use_repo(pip, "pip")
 

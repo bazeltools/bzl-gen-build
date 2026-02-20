@@ -212,7 +212,7 @@ set -x
 
 bazel query '@pip//...' | grep '@pip' > $TMP_WORKING_STATE/external_targets
 
-CACHE_KEY="$(generate_cache_key $TMP_WORKING_STATE/external_targets $REPO_ROOT/WORKSPACE $REPO_ROOT/requirements_lock_3_9.txt)"
+CACHE_KEY="$(generate_cache_key $TMP_WORKING_STATE/external_targets $REPO_ROOT/WORKSPACE $REPO_ROOT/requirements_lock_3_10.txt)"
 rm -rf $TMP_WORKING_STATE/external_files &> /dev/null || true
 # try_fetch_from_remote_cache "remote_python_${CACHE_KEY}"
 
