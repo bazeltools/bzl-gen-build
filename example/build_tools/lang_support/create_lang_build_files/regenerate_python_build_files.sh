@@ -19,7 +19,7 @@ bazel query '@pip//...' | grep "@pip.*:pkg" > $TMP_WORKING_STATE/external_target
 bazel query 'kind("py", com/...)' > /dev/null
 cat $OUTPUT_BASE/command.log | grep '//' >> $TMP_WORKING_STATE/external_targets
 
-CACHE_KEY="$(generate_cache_key $TMP_WORKING_STATE/external_targets $REPO_ROOT/WORKSPACE $REPO_ROOT/requirements_lock_3_9.txt)"
+CACHE_KEY="$(generate_cache_key $TMP_WORKING_STATE/external_targets $REPO_ROOT/WORKSPACE $REPO_ROOT/requirements_lock_3_10.txt)"
 rm -rf $TMP_WORKING_STATE/external_files &> /dev/null || true
 # try_fetch_from_remote_cache "remote_python_${CACHE_KEY}"
 
