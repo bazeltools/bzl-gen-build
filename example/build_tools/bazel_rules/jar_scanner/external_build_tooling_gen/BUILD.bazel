@@ -1,0 +1,11 @@
+# Placeholder. Override this module via --override_module=external_build_tooling_gen=/path.
+filegroup(
+    name = "python-entity-extractor",
+    srcs = [],
+    visibility = ["//visibility:public"],
+)
+filegroup(
+    name = "jarscanner",
+    srcs = [],
+    visibility = ["//visibility:public"],
+)

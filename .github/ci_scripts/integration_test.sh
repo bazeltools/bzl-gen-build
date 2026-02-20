@@ -6,7 +6,7 @@ set -o pipefail # don't hide errors within pipes
 
 cd example
 TOOLING_WORKING_DIRECTORY=/tmp/bzl-gen-build source build_tools/lang_support/create_lang_build_files/regenerate.sh
-bazel test ...
+bazel test --override_module=external_build_tooling_gen=/tmp/bzl-gen-build ...
 
 changes=$(git diff --name-only --diff-filter=ACMRT | xargs)
 if [ ! -z "$changes" ]; then

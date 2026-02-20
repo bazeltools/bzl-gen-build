@@ -12,8 +12,6 @@ set -efo pipefail
 
 set +x
 trap 'echo ERROR in ${BASH_SOURCE[0]}, failed to run command, line with error: $LINENO' ERR
-
-OUTPUT_BASE="$(bazel info output_base)"
 """
 TEMPLATE = """
 
@@ -23,22 +21,28 @@ START_BATCH=$(date +%s)
 
 
 set +e
-set -x
+
+BAZEL_BUILD_OUTPUT="/tmp/bazel_wheel_scan_{output_idx}.log"
+
+# --noshow_loading_progress and --noshow_progress are important otherwise it may pollute stderr for later parsing.
 bazel build {targets} \
+  --noshow_loading_progress \
+  --noshow_progress \
+  --remote_download_outputs=all \
   --aspects build_tools/bazel_rules/wheel_scanner/wheel_scanner.bzl%wheel_scanner_aspect \
   --output_groups=+wheel_scanner_out \
-  --override_repository=external_build_tooling_gen=${{BZL_GEN_BUILD_TOOLS_PATH}} \
-  --show_result=1000000 2> /tmp/cmd_out
+  --override_module=external_build_tooling_gen=${{BZL_GEN_BUILD_TOOLS_PATH}} \
+  --show_result=1000000 > "$BAZEL_BUILD_OUTPUT" 2>&1
 RET=$?
-set +x
 if [ "$RET" != "0" ]; then
-    cat /tmp/cmd_out
+    echo "Bazel build failed. Output:"
+    cat "$BAZEL_BUILD_OUTPUT"
     exit $RET
 fi
 
 set +o pipefail
 inner_idx=0
-for f in `cat $OUTPUT_BASE/command.log |
+for f in `cat "$BAZEL_BUILD_OUTPUT" |
   grep ".*\.json$" |
   sed -e 's/^[^ ]*//' |
   sed -e 's/^[^A-Za-z0-9/]*//' |
@@ -63,10 +67,11 @@ def __transform_target(t):
     else:
         return t
 
+
 def write_command(file, output_idx, command_list):
     file.write(
         TEMPLATE.format(
-            targets=" ".join([t for t in command_list]),
+            targets=" ".join([__transform_target(t) for t in command_list]),
             output_idx=output_idx,
             target_count=len(command_list),
         )
