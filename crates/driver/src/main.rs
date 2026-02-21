@@ -94,6 +94,10 @@ pub struct Opt {
     #[clap(long)]
     append: bool,
 
+    /// overwrite only the section between BEGIN/END BZL_GEN_BUILD_<tag>_GENERATED_CODE (e.g. --overwrite PY)
+    #[clap(long)]
+    overwrite: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
