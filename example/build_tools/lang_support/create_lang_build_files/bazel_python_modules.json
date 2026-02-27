@@ -38,7 +38,8 @@
         "test_globs": [
           "**/test*.py",
           "**/*test.py"
-        ]
+        ],
+        "disable_format": true
       }
     }
   }

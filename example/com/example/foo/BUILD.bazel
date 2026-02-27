@@ -1,3 +1,4 @@
+# buildifier: disable=format
 # ---- BEGIN BZL_GEN_BUILD_LOAD_PROTO_GENERATED_CODE ---- no_hash
 
 load("@rules_proto//proto:defs.bzl", "proto_library")
