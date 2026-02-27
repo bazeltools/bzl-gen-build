@@ -1,3 +1,4 @@
+# buildifier: disable=format
 # ---- BEGIN BZL_GEN_BUILD_LOAD_PY_GENERATED_CODE ---- no_hash
 
 load("//build_tools/lang_support/python:py_binary.bzl", "py_binary")

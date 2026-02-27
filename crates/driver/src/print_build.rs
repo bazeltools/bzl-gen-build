@@ -16,7 +16,7 @@ use ast::{Expr, Stmt};
 use bzl_gen_build_python_utilities::{ast_builder, PythonProgram};
 use bzl_gen_build_shared_types::{
     build_config::{SourceConfig, TargetNameStrategy, WriteMode},
-    module_config::ModuleConfig,
+    module_config::{maybe_add_buildifier_disable, ModuleConfig},
     *,
 };
 use futures::{stream, StreamExt};
@@ -513,9 +513,9 @@ async fn generate_targets<F, R>(
     element: &String,
     emitted_files: &mut Vec<PathBuf>,
     on_child: F,
-) -> Result<TargetEntries>
+) -> Result<(TargetEntries, Option<&'static ModuleConfig>)>
 where
-    F: Fn(PathBuf, TargetEntries) -> R,
+    F: Fn(PathBuf, TargetEntries, bool) -> R,
     R: Future<Output = Result<i32>> + Send + 'static,
 {
     let mut module_config: Option<&ModuleConfig> = None;
@@ -551,7 +551,7 @@ where
     let module_config = if let Some(a) = module_config {
         a
     } else {
-        return Ok(Default::default());
+        return Ok((Default::default(), None));
     };
 
     let target_folder = opt.working_directory.join(&element);
@@ -790,7 +790,7 @@ where
 
                     let sub_target = opt.working_directory.join(directory).join("BUILD.bazel");
                     emitted_files.push(sub_target.clone());
-                    on_child(sub_target, t).await?;
+                    on_child(sub_target, t, module_config.disable_format).await?;
                 } else {
                     return Err(anyhow!(
                         "Unable to extract folder name for node: {}",
@@ -1059,7 +1059,7 @@ where
         }
     }
 
-    Ok(t)
+    Ok((t, Some(module_config)))
 }
 
 /// Replaces or appends the tagged section in existing BUILD file content.
@@ -1126,14 +1126,14 @@ async fn print_file(
     let target_folder = opt.working_directory.join(&element);
     let target_file = target_folder.join("BUILD.bazel");
     emitted_files.push(target_file.clone());
-    let t1 = generate_targets(
+    let (t1, mc1) = generate_targets(
         opt,
         project_conf,
         SourceConfig::Main,
         &graph_nodes,
         &element,
         &mut emitted_files,
-        |sub_target: PathBuf, t: TargetEntries| async move {
+        |sub_target: PathBuf, t: TargetEntries, disable_format: bool| async move {
             let _handle = concurrent_io_operations.acquire().await?;
             if let Some(tag) = opt.overwrite.as_deref() {
                 let existing = tokio::fs::read_to_string(&sub_target)
@@ -1151,11 +1151,13 @@ async fn print_file(
                     &targets_block,
                     false,
                 );
+                let content = maybe_add_buildifier_disable(&content, disable_format);
                 tokio::fs::write(sub_target.clone(), content)
                     .await
                     .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             } else {
-                tokio::fs::write(sub_target.clone(), t.emit_build_file(None)?)
+                let content = maybe_add_buildifier_disable(t.emit_build_file(None)?, disable_format);
+                tokio::fs::write(sub_target.clone(), content)
                     .await
                     .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             }
@@ -1163,14 +1165,14 @@ async fn print_file(
         },
     )
     .await?;
-    let t2 = generate_targets(
+    let (t2, mc2) = generate_targets(
         opt,
         project_conf,
         SourceConfig::Test,
         &graph_nodes,
         &element,
         &mut emitted_files,
-        |sub_target: PathBuf, t: TargetEntries| async move {
+        |sub_target: PathBuf, t: TargetEntries, disable_format: bool| async move {
             let _handle = concurrent_io_operations.acquire().await?;
             if let Some(tag) = opt.overwrite.as_deref() {
                 let existing = tokio::fs::read_to_string(&sub_target)
@@ -1188,11 +1190,13 @@ async fn print_file(
                     &targets_block,
                     false,
                 );
+                let content = maybe_add_buildifier_disable(&content, disable_format);
                 tokio::fs::write(sub_target.clone(), content)
                     .await
                     .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             } else {
-                tokio::fs::write(sub_target.clone(), t.emit_build_file(None)?)
+                let content = maybe_add_buildifier_disable(t.emit_build_file(None)?, disable_format);
+                tokio::fs::write(sub_target.clone(), content)
                     .await
                     .with_context(|| format!("Attempting to write file data to {:?}", sub_target))?;
             }
@@ -1201,6 +1205,10 @@ async fn print_file(
     )
     .await?;
     let t = TargetEntries::combine(t1, t2);
+    let disable_format = mc1
+        .or(mc2)
+        .map(|mc| mc.disable_format)
+        .unwrap_or(false);
     let handle = concurrent_io_operations.acquire().await?;
     let write_mode = WriteMode::new(opt.append, opt.overwrite.clone());
     match &write_mode {
@@ -1213,7 +1221,9 @@ async fn print_file(
                 .await?;
 
             if !t.entries.is_empty() {
-                file.write(t.emit_build_file(None)?.as_bytes())
+                let content =
+                    maybe_add_buildifier_disable(t.emit_build_file(None)?, disable_format);
+                file.write(content.as_bytes())
                     .await
                     .with_context(|| {
                         format!("Attempting to write file data to {:?}", target_file)
@@ -1228,7 +1238,9 @@ async fn print_file(
                 .open(&target_file)
                 .await?;
             if !t.entries.is_empty() {
-                file.write_all(t.emit_build_file(None)?.as_bytes())
+                let content =
+                    maybe_add_buildifier_disable(t.emit_build_file(None)?, disable_format);
+                file.write_all(content.as_bytes())
                     .await
                     .with_context(|| {
                         format!("Attempting to write file data to {:?}", target_file)
@@ -1251,6 +1263,7 @@ async fn print_file(
                 &targets_block,
                 false,
             );
+            let content = maybe_add_buildifier_disable(&content, disable_format);
             tokio::fs::write(&target_file, content)
                 .await
                 .with_context(|| {
@@ -1409,6 +1422,7 @@ mod tests {
                     test_roots: vec!["src/test/protos".to_string()],
                     test_globs: vec![],
                     circular_dependency_allow_list: vec![],
+                    disable_format: false,
                 },
             )]),
             includes: vec![],
@@ -1472,6 +1486,7 @@ mod tests {
                     test_roots: vec!["src/test/protos".to_string()],
                     test_globs: vec![],
                     circular_dependency_allow_list: vec![],
+                    disable_format: false,
                 },
             )]),
             includes: vec![],
@@ -1586,14 +1601,14 @@ py_proto_library(
         let mut emitted_files: Vec<PathBuf> = Vec::default();
         let opt = Box::leak(Box::new(example_opt(no_aggregate_source, &write_mode)));
         let boxed_project_conf = Box::leak(Box::new(project_conf));
-        let target_entries = generate_targets(
+        let (target_entries, _) = generate_targets(
             opt,
             boxed_project_conf,
             SourceConfig::Main,
             &build_graph,
             &element,
             &mut emitted_files,
-            |_sub_target: PathBuf, _t: TargetEntries| async move { Ok(0) },
+            |_sub_target: PathBuf, _t: TargetEntries, _disable_format: bool| async move { Ok(0) },
         )
         .await?;
         assert_eq!(target_entries.entries.len(), expected_target_count);

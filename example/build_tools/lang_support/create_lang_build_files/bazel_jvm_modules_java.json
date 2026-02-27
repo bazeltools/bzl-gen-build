@@ -36,7 +36,8 @@
       ],
       "circular_dependency_allow_list": [
         "src/main/java/com/example"
-      ]
+      ],
+      "disable_format": true
     }
   }
 }
