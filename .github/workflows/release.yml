@@ -21,7 +21,7 @@ jobs:
             platform: linux-ubuntu-24.04
             artifact: bzl-gen-build-linux-ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -54,7 +54,7 @@ jobs:
     needs: [rust-binaries]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
