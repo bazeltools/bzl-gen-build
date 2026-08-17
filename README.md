@@ -10,6 +10,10 @@ bzl-gen-build works by running the following phases for each file types:
 3. Build graph of usages and definition sites
 4. Generate Bazel targets
 
+> [!NOTE]
+> Prefer [Gazelle](https://github.com/bazel-contrib/bazel-gazelle) if it fits your use case, as it has a much larger community.
+> The primary advantage of `bzl-gen-build` is Scala support, which would be difficult to achieve in Gazelle. See #249.
+
 ### Extractors supported
 So far we have support for:
 - Scala
