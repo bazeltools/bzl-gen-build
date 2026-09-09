@@ -828,6 +828,33 @@ where
         );
     } // end for graph_nodes
 
+    // In `--no-aggregate-source` (one target per source file) mode, optionally also emit a
+    // single `<dir>_files` filegroup globbing every source file of the primary extension in
+    // this directory. Aggregate-source mode already emits an equivalent filegroup per real
+    // node, so this only applies here; restricted to the main config so a directory that's
+    // processed for both main and test source configs doesn't get two conflicting filegroups
+    // of the same name.
+    if opt.no_aggregate_source
+        && source_conf == SourceConfig::Main
+        && module_config.emit_files_filegroup
+        && !t.entries.is_empty()
+    {
+        if let Some(primary_extension) = module_config.file_extensions.first() {
+            t.entries.push(TargetEntry {
+                name: format!("{}_files", base_name),
+                extra_kv_pairs: Vec::default(),
+                required_load: HashMap::default(),
+                visibility: None,
+                srcs: Some(SrcType::Glob {
+                    include: vec![format!("**/*.{}", primary_extension)],
+                    exclude: Vec::default(),
+                }),
+                target_type: Arc::new("filegroup".to_string()),
+                extra_k_strs: Vec::default(),
+            });
+        }
+    }
+
     fn to_label(
         opt: &'static Opt,
         entry: &str,
@@ -1423,6 +1450,7 @@ mod tests {
                     test_globs: vec![],
                     circular_dependency_allow_list: vec![],
                     disable_format: false,
+                    emit_files_filegroup: false,
                 },
             )]),
             includes: vec![],
@@ -1487,6 +1515,7 @@ mod tests {
                     test_globs: vec![],
                     circular_dependency_allow_list: vec![],
                     disable_format: false,
+                    emit_files_filegroup: false,
                 },
             )]),
             includes: vec![],
