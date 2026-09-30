@@ -24,6 +24,13 @@ pub struct ModuleConfig {
     /// When true, prepend `# buildifier: disable=format` on the first line of generated BUILD files.
     #[serde(default)]
     pub disable_format: bool,
+
+    /// When true, and the driver is run with `--no-aggregate-source` (one target per source
+    /// file), also emit a single `<dir>_files` filegroup per directory globbing every source
+    /// file of the primary extension. No effect in the default aggregate-source mode, which
+    /// already emits an equivalent filegroup per real node.
+    #[serde(default)]
+    pub emit_files_filegroup: bool,
 }
 
 /// Prepends `# buildifier: disable=format` on the first line when disable_format is true.
