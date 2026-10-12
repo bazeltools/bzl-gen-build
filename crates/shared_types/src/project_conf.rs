@@ -176,6 +176,7 @@ mod tests {
                         test_globs: vec![],
                         circular_dependency_allow_list: vec![],
                         disable_format: false,
+                        emit_files_filegroup: false,
                     }
                 )]),
                 includes: vec![],
