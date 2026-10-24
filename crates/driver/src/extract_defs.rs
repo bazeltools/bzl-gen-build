@@ -11,7 +11,6 @@ use crate::{
 };
 use anyhow::{anyhow, Context, Result};
 use bzl_gen_build_shared_types::{internal_types::tree_node::TreeNode, *};
-use futures::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
@@ -91,19 +90,22 @@ pub async fn extract_exports(
         }
     }
 
-    let mut visited_paths = stream::iter(work.into_iter()).map(|(directory, work_items)| {
-        let path_sha_to_exports = path_sha_to_exports.clone();
-        tokio::spawn(async_extract_defs(
-            concurrent_io_operations,
-            path_sha_to_exports,
-            directory,
-            work_items,
-        ))
-    });
+    // Spawn every task up front so they run concurrently; the semaphore bounds the IO.
+    let handles: Vec<_> = work
+        .into_iter()
+        .map(|(directory, work_items)| {
+            tokio::spawn(async_extract_defs(
+                concurrent_io_operations,
+                path_sha_to_exports.clone(),
+                directory,
+                work_items,
+            ))
+        })
+        .collect();
 
-    let mut result: HashMap<String, String> = HashMap::default();
+    let mut result: HashMap<String, String> = HashMap::with_capacity(handles.len());
 
-    while let Some(r) = visited_paths.next().await {
+    for r in handles {
         let (k, v) = r.await.map_err(|e| anyhow!("{:#?}", e))??;
         result.insert(k, v);
     }
