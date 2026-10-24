@@ -8,3 +8,7 @@ members = [
     "shared_types",
     "jarscanner"
 ]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
