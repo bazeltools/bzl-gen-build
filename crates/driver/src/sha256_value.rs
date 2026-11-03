@@ -1,7 +1,7 @@
 use sha2::Digest;
 use sha2::Sha256;
+use std::io::Read;
 use std::str::FromStr;
-use tokio::io::AsyncReadExt;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Sha256Value([u8; 32]);
@@ -29,7 +29,6 @@ impl Sha256Value {
     where
         I: Iterator<Item = &'a [u8]>,
     {
-        let _buffer = vec![0; 1024 * 3];
         let mut hasher = Sha256::new();
 
         for ele in data {
@@ -39,20 +38,25 @@ impl Sha256Value {
         Sha256Value::from_hasher(hasher)
     }
 
+    /// Hash a file. The whole read+hash loop runs in one blocking task, rather than
+    /// paying a blocking-pool round trip per read as `tokio::fs::File` does.
     pub async fn from_path(path: &std::path::Path) -> Result<Sha256Value, std::io::Error> {
-        let mut f = tokio::fs::File::open(&path).await?;
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || Self::from_path_blocking(&path))
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+    }
 
-        let mut buffer = vec![0; 1024 * 3];
+    fn from_path_blocking(path: &std::path::Path) -> Result<Sha256Value, std::io::Error> {
+        let mut f = std::fs::File::open(path)?;
+        let mut buffer = vec![0; 64 * 1024];
         let mut hasher = Sha256::new();
-
-        // read up to 10 bytes
-        let mut n = 1;
-        while n > 0 {
-            n = f.read(&mut buffer[..]).await?;
-
-            if n > 0 {
-                hasher.update(&buffer[0..n]);
+        loop {
+            let n = f.read(&mut buffer[..])?;
+            if n == 0 {
+                break;
             }
+            hasher.update(&buffer[0..n]);
         }
         Ok(Sha256Value::from_hasher(hasher))
     }

@@ -139,6 +139,10 @@ struct GraphState {
     def_to_id: Arc<HashMap<Arc<String>, u64>>,
     owns_map: HashMap<u64, HashSet<usize>>,
     node_to_defs_cache: Option<HashMap<usize, Arc<HashSet<Arc<String>>>>>,
+    // Reverse of compile_edges/runtime_edges (target -> sources). Only populated while
+    // `collapse` runs, so that merging a node costs its degree rather than the graph size.
+    compile_in: HashMap<usize, HashSet<usize>>,
+    runtime_in: HashMap<usize, HashSet<usize>>,
 }
 
 impl GraphState {
@@ -309,54 +313,38 @@ impl GraphState {
     }
 
     pub fn common_ancestor(&mut self) -> Result<()> {
-        let consumed_nodes = self.consumed_nodes.clone();
-        for (k, values) in consumed_nodes.iter() {
-            let lst: Vec<&str> = values
-                .iter()
-                .flat_map(|e| self.get_node_label(e).into_iter())
-                .collect();
-            let ky = &self.get_node_label(k).unwrap();
+        // Only the keys are snapshotted; the consumed sets are read live below.
+        let mut keys: Vec<usize> = self.consumed_nodes.keys().copied().collect();
+        keys.sort_unstable();
+        for k in keys {
+            // Consumed by an earlier merge in this pass, so no longer a merge target.
+            let Some(values) = self.consumed_nodes.get(&k) else {
+                continue;
+            };
+            let ky = self.get_node_label(&k).unwrap();
 
-            let mut entries: HashSet<String> = HashSet::default();
-
-            for ele in lst.iter() {
-                match ele.strip_prefix(ky) {
-                    None => return Err(anyhow!("Element in equiv set doesn't share the same prefix: target: {} , parent: {}", ele, ky)),
-                    Some(remainder) => {
-                        let mut previous: Option<String> = None;
-                        for next_section in remainder.split('/').filter(|e| !e.is_empty()) {
-                            let l = if let Some(p) = previous {
-                                format!("{}/{}", p, next_section)
-                            } else {
-                                format!("{}/{}", ky, next_section)
-                            };
-                                entries.insert(l.clone());
-                                previous = Some(l);
-                            }
+            // Every live node whose label lies on a path below `ky` towards a consumed node.
+            let mut to_collapse: HashSet<usize> = HashSet::default();
+            let mut path = String::new();
+            for ele in values.iter().flat_map(|e| self.get_node_label(e)) {
+                let Some(remainder) = ele.strip_prefix(ky) else {
+                    return Err(anyhow!("Element in equiv set doesn't share the same prefix: target: {} , parent: {}", ele, ky));
+                };
+                path.clear();
+                path.push_str(ky);
+                for next_section in remainder.split('/').filter(|e| !e.is_empty()) {
+                    path.push('/');
+                    path.push_str(next_section);
+                    if let Some(id) = self.forward_map.get(&path) {
+                        if self.node_is_live(*id) {
+                            to_collapse.insert(*id);
                         }
                     }
+                }
             }
 
-            let to_collapse: Vec<usize> = entries
-                .iter()
-                .filter_map(|ele| {
-                    let al = Arc::new((*ele).clone());
-
-                    if let Some(id) = self.forward_map.get(&al) {
-                        let id = *id;
-                        if self.node_is_live(id) {
-                            Some(id)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
             if !to_collapse.is_empty() {
-                self.merge_node(*k, &to_collapse)?;
+                self.merge_node(k, &to_collapse)?;
             }
         }
         Ok(())
@@ -366,39 +354,57 @@ impl GraphState {
     where
         T: IntoIterator<Item = &'a usize> + Copy,
     {
-        fn consume_edges<'a, T>(
-            m: &mut HashMap<usize, HashSet<usize>>,
+        // Only valid while `collapse` maintains the incoming indexes.
+        fn consume_edges(
+            out: &mut HashMap<usize, HashSet<usize>>,
+            incoming: &mut HashMap<usize, HashSet<usize>>,
             destination: usize,
             error_on_missing: bool,
-            src: T,
-        ) -> Result<()>
-        where
-            T: IntoIterator<Item = &'a usize> + Copy,
-        {
-            let mut parent = m.remove(&destination).unwrap_or_default();
-
-            for e in src.into_iter() {
-                if destination != *e {
-                    if let Some(old) = m.remove(e) {
-                        parent.extend(old.into_iter());
-                    } else if error_on_missing {
+            src: &HashSet<usize>,
+        ) -> Result<()> {
+            // The merged node points at everything its members pointed at, except themselves.
+            let mut parent = out.remove(&destination).unwrap_or_default();
+            for e in src.iter() {
+                match out.remove(e) {
+                    Some(old) => {
+                        for t in old.iter() {
+                            if let Some(sources) = incoming.get_mut(t) {
+                                sources.remove(e);
+                            }
+                        }
+                        parent.extend(old);
+                    }
+                    None if error_on_missing => {
                         return Err(anyhow!(
                             "Tried to squash a node {} into another node, but it didn't exist?",
                             e
                         ));
                     }
+                    None => {}
                 }
             }
             parent.remove(&destination);
+            parent.retain(|t| !src.contains(t));
+            for t in parent.iter() {
+                incoming.entry(*t).or_default().insert(destination);
+            }
+            out.insert(destination, parent);
 
-            m.insert(destination, parent);
-            for (_k, v) in m.iter_mut() {
-                for e in src.into_iter() {
-                    if destination != *e && v.remove(e) {
-                        v.insert(destination);
+            // Whatever pointed at a consumed node now points at the destination.
+            for e in src.iter() {
+                for source in incoming.remove(e).into_iter().flatten() {
+                    if source == destination || src.contains(&source) {
+                        continue;
                     }
+                    if let Some(edges) = out.get_mut(&source) {
+                        edges.remove(e);
+                        edges.insert(destination);
+                    }
+                    incoming.entry(destination).or_default().insert(source);
                 }
-                v.remove(_k);
+            }
+            if let Some(sources) = incoming.get_mut(&destination) {
+                sources.retain(|s| *s != destination && !src.contains(s));
             }
             Ok(())
         }
@@ -414,8 +420,21 @@ impl GraphState {
         consumed_nodes.remove(&destination);
         self.consumed_nodes.insert(destination, consumed_nodes);
 
-        consume_edges(&mut self.compile_edges, destination, true, src)?;
-        consume_edges(&mut self.runtime_edges, destination, false, src)?;
+        let src: HashSet<usize> = src.into_iter().copied().filter(|e| *e != destination).collect();
+        consume_edges(
+            &mut self.compile_edges,
+            &mut self.compile_in,
+            destination,
+            true,
+            &src,
+        )?;
+        consume_edges(
+            &mut self.runtime_edges,
+            &mut self.runtime_in,
+            destination,
+            false,
+            &src,
+        )?;
 
         Ok(())
     }
@@ -437,108 +456,153 @@ impl GraphState {
         c_edges.chain(r_edges)
     }
 
-    fn collapse_loop(&mut self, element: usize) -> Result<Option<usize>> {
-        let mut reverse_steps: HashMap<usize, usize> = HashMap::default();
-        let mut to_visit: Vec<usize> = vec![element];
+    /// Strongly connected components with more than one node over compile and runtime
+    /// edges, i.e. every import cycle, found in a single iterative Tarjan pass.
+    /// Members are sorted, and components are ordered by their smallest member, so the
+    /// result doesn't depend on hash iteration order.
+    fn cyclic_sccs(&self) -> Vec<Vec<usize>> {
+        #[derive(Default)]
+        struct Tarjan {
+            index: HashMap<usize, usize>,
+            low: HashMap<usize, usize>,
+            on_stack: HashSet<usize>,
+            stack: Vec<usize>,
+        }
+        impl Tarjan {
+            fn discover(&mut self, node: usize) {
+                let i = self.index.len();
+                self.index.insert(node, i);
+                self.low.insert(node, i);
+                self.stack.push(node);
+                self.on_stack.insert(node);
+            }
+        }
 
-        'outer_loop: while let Some(v) = to_visit.pop() {
-            for p in self.get_all_outbound_nodes(v) {
-                let previously_present = reverse_steps.insert(p, v);
-                if p == element {
-                    break 'outer_loop;
-                } else if previously_present.is_none() {
-                    to_visit.push(p);
+        let mut roots: Vec<usize> = self
+            .compile_edges
+            .keys()
+            .chain(self.runtime_edges.keys())
+            .copied()
+            .collect();
+        roots.sort_unstable();
+        roots.dedup();
+
+        let mut t = Tarjan::default();
+        let mut sccs: Vec<Vec<usize>> = Vec::default();
+        // (node, its outbound edges, next edge to visit): an explicit stack, since
+        // dependency chains can be deep enough to overflow native recursion.
+        let mut work: Vec<(usize, Vec<usize>, usize)> = Vec::default();
+
+        for root in roots {
+            if t.index.contains_key(&root) {
+                continue;
+            }
+            t.discover(root);
+            work.push((root, self.get_all_outbound_nodes(root).collect(), 0));
+
+            while let Some(frame) = work.last_mut() {
+                let v = frame.0;
+                let next_edge = frame.1.get(frame.2).copied();
+                frame.2 += 1;
+
+                match next_edge {
+                    Some(w) => {
+                        if !t.index.contains_key(&w) {
+                            t.discover(w);
+                            work.push((w, self.get_all_outbound_nodes(w).collect(), 0));
+                        } else if t.on_stack.contains(&w) {
+                            let wi = t.index[&w];
+                            let lv = t.low.get_mut(&v).unwrap();
+                            *lv = (*lv).min(wi);
+                        }
+                    }
+                    None => {
+                        work.pop();
+                        let v_low = t.low[&v];
+                        if v_low == t.index[&v] {
+                            let mut component = Vec::default();
+                            while let Some(n) = t.stack.pop() {
+                                t.on_stack.remove(&n);
+                                component.push(n);
+                                if n == v {
+                                    break;
+                                }
+                            }
+                            if component.len() > 1 {
+                                component.sort_unstable();
+                                sccs.push(component);
+                            }
+                        }
+                        if let Some((parent, _, _)) = work.last() {
+                            let lp = t.low.get_mut(parent).unwrap();
+                            *lp = (*lp).min(v_low);
+                        }
+                    }
                 }
             }
         }
-        let mut to_collapse: HashSet<usize> = HashSet::default();
-        to_collapse.insert(element);
-
-        let mut current = reverse_steps.get(&element);
-
-        while let Some(nxt) = current {
-            if *nxt == element || to_collapse.contains(nxt) {
-                break;
-            } else {
-                to_collapse.insert(*nxt);
-                current = reverse_steps.get(nxt);
-            }
-        }
-        if to_collapse.len() > 1 {
-            let target = self.find_or_create_common_ancestor(&to_collapse)?;
-            self.merge_node(target, &to_collapse)?;
-            Ok(Some(target))
-        } else {
-            Ok(None)
-        }
+        sccs.sort_unstable_by_key(|c| c[0]);
+        sccs
     }
 
-    fn in_cycle(&self, node: usize, circular_dependency_allow_list: &Vec<String>) -> Result<bool> {
-        let mut to_visit = vec![node];
-        let mut inner_visited: HashSet<usize> = HashSet::default();
-
-        while let Some(nxt) = to_visit.pop() {
-            if inner_visited.contains(&nxt) {
-                continue;
-            }
-            inner_visited.insert(nxt);
-            for outbound_edge in self.get_all_outbound_nodes(nxt) {
-                to_visit.push(outbound_edge);
-                if outbound_edge == node {
-                    if let Some(node_label) = self.get_node_label(&node) {
-                        if !circular_dependency_allow_list
-                            .iter()
-                            .any(|p| node_label.starts_with(p))
-                        {
-                            let mut cycle_nodes: Vec<_> = inner_visited.iter().cloned().collect();
-                            cycle_nodes.sort();
-
-                            return Err(anyhow::anyhow!("Circular dependency found in the package {}.
+    fn check_cycle_allowed(
+        &self,
+        cycle: &[usize],
+        circular_dependency_allow_list: &Vec<String>,
+    ) -> Result<()> {
+        for node in cycle {
+            let node_label = self.get_node_label(node).unwrap_or_default();
+            if !circular_dependency_allow_list
+                .iter()
+                .any(|p| node_label.starts_with(p))
+            {
+                return Err(anyhow::anyhow!("Circular dependency found in the package {}.
   {}
   Resolve the cycle, or opt in to collapsing this into a higher-level build target by adding circular_dependency_allow_list in the module config JSON.
   Note that creating such aggregate target across multiple directories will slow down the build anytime you make source change in the area.",
-                                node_label,
-                                cycle_nodes.iter().map(|n| self.get_node_label(n).unwrap_or_default()).collect::<Vec<_>>().join(", ")
-                            ));
-                        }
-                    }
-                    return Ok(true);
-                }
+                    node_label,
+                    cycle.iter().map(|n| self.get_node_label(n).unwrap_or_default()).collect::<Vec<_>>().join(", ")
+                ));
             }
         }
-        Ok(false)
+        Ok(())
     }
 
     pub fn collapse(&mut self, circular_dependency_allow_list: &Vec<String>) -> Result<()> {
-        let mut no_loops: HashSet<usize> = HashSet::default();
-        loop {
-            let mut incompress = None;
-            'outer_loop: for (node, _) in self
-                .compile_edges
-                .iter()
-                .chain(self.runtime_edges.iter())
-                .filter(|(_k, v)| !v.is_empty())
-            {
-                if no_loops.contains(node) {
-                    continue;
-                }
-                if self.in_cycle(*node, circular_dependency_allow_list)? {
-                    incompress = Some(*node);
-                    break 'outer_loop;
-                } else {
-                    no_loops.insert(*node);
+        fn reverse(edges: &HashMap<usize, HashSet<usize>>) -> HashMap<usize, HashSet<usize>> {
+            let mut incoming: HashMap<usize, HashSet<usize>> = HashMap::default();
+            for (source, targets) in edges.iter() {
+                for t in targets.iter() {
+                    incoming.entry(*t).or_default().insert(*source);
                 }
             }
-            if let Some(i) = incompress {
-                if let Some(target) = self.collapse_loop(i)? {
-                    // Since we can merge to a 3rd node not in the dependency graph, that node needs to be re-added to the
-                    // to visit graph, since it may have been eliminated before.
-                    no_loops.remove(&target);
-                };
-                self.common_ancestor()?;
-            } else {
+            incoming
+        }
+        self.compile_in = reverse(&self.compile_edges);
+        self.runtime_in = reverse(&self.runtime_edges);
+        let result = self.collapse_cycles(circular_dependency_allow_list);
+        self.compile_in = Default::default();
+        self.runtime_in = Default::default();
+        result
+    }
+
+    fn collapse_cycles(&mut self, circular_dependency_allow_list: &Vec<String>) -> Result<()> {
+        loop {
+            let sccs = self.cyclic_sccs();
+            if sccs.is_empty() {
                 return Ok(());
             }
+            for cycle in sccs {
+                // Merging one component can consume or redirect nodes of another (the common
+                // ancestor may be an existing node). Anything stale is found again next round.
+                if !cycle.iter().all(|n| self.node_is_live(*n)) {
+                    continue;
+                }
+                self.check_cycle_allowed(&cycle, circular_dependency_allow_list)?;
+                let target = self.find_or_create_common_ancestor(&cycle)?;
+                self.merge_node(target, &cycle)?;
+            }
+            self.common_ancestor()?;
         }
     }
 }
@@ -804,6 +868,8 @@ async fn load_initial_graph(
         node_counter,
         consumed_nodes: HashMap::default(),
         node_to_defs_cache: Default::default(),
+        compile_in: Default::default(),
+        runtime_in: Default::default(),
     })
 }
 
@@ -958,6 +1024,10 @@ pub async fn build_graph(
 }
 
 #[cfg(test)]
+#[path = "build_graph_reference_test.rs"]
+mod reference;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1104,5 +1174,450 @@ mod tests {
         assert!(graph.node_exists(foo_bar_ba2));
 
         assert!(graph.consumed_nodes.is_empty());
+    }
+
+    // ---- helpers for the cycle collapsing tests below ----
+
+    fn real(graph: &mut GraphState, label: &str) -> usize {
+        graph.add_node(label.to_string(), NodeType::RealNode)
+    }
+
+    fn id_of(graph: &GraphState, label: &str) -> usize {
+        *graph
+            .forward_map
+            .get(&label.to_string())
+            .unwrap_or_else(|| panic!("no node {}", label))
+    }
+
+    fn labels_of<'a>(graph: &GraphState, ids: impl IntoIterator<Item = &'a usize>) -> Vec<String> {
+        let mut v: Vec<String> = ids
+            .into_iter()
+            .map(|i| graph.get_node_label(i).unwrap().to_string())
+            .collect();
+        v.sort();
+        v
+    }
+
+    fn compile_labels(graph: &GraphState, label: &str) -> Vec<String> {
+        labels_of(graph, &graph.compile_edges[&id_of(graph, label)])
+    }
+
+    fn live_labels(graph: &GraphState) -> Vec<String> {
+        labels_of(graph, graph.compile_edges.keys())
+    }
+
+    /// (compile edges, runtime edges, consumed real nodes) by label, for every live node.
+    type Snapshot = std::collections::BTreeMap<String, (Vec<String>, Vec<String>, Vec<String>)>;
+
+    fn snapshot(graph: &GraphState) -> Snapshot {
+        graph
+            .compile_edges
+            .iter()
+            .map(|(id, compile)| {
+                (
+                    graph.get_node_label(id).unwrap().to_string(),
+                    (
+                        labels_of(graph, compile),
+                        labels_of(graph, graph.runtime_edges.get(id).into_iter().flatten()),
+                        // Synthetic nodes are never emitted, and the original algorithm creates
+                        // (hash-order dependent) intermediate ones that get absorbed again.
+                        labels_of(
+                            graph,
+                            graph
+                                .consumed_nodes
+                                .get(id)
+                                .into_iter()
+                                .flatten()
+                                .filter(|c| {
+                                    graph.get_metadata(c).map(|m| m.node_type)
+                                        == Some(NodeType::RealNode)
+                                }),
+                        ),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    /// No live node may also be consumed by another, and no node may be consumed twice.
+    fn is_consistent(graph: &GraphState) -> bool {
+        let mut seen: HashSet<usize> = HashSet::default();
+        graph
+            .consumed_nodes
+            .values()
+            .flatten()
+            .all(|c| !graph.compile_edges.contains_key(c) && seen.insert(*c))
+    }
+
+    fn allow_all() -> Vec<String> {
+        vec![String::new()]
+    }
+
+    // ---- cycle collapsing ----
+
+    #[test]
+    fn test_independent_cycles_collapse_together() {
+        let mut graph = GraphState::default();
+        let ax = real(&mut graph, "com/a/x");
+        let ay = real(&mut graph, "com/a/y");
+        let bp = real(&mut graph, "com/b/p");
+        let bq = real(&mut graph, "com/b/q");
+        let cz = real(&mut graph, "com/c/z");
+        graph.add_compile_edge(ax, ay);
+        graph.add_compile_edge(ay, ax);
+        graph.add_compile_edge(bp, bq);
+        graph.add_compile_edge(bq, bp);
+        graph.add_compile_edge(ax, cz);
+        graph.add_compile_edge(bq, cz);
+        graph.add_compile_edge(ay, bp);
+
+        graph.collapse(&allow_all()).unwrap();
+
+        assert_eq!(live_labels(&graph), vec!["com/a", "com/b", "com/c/z"]);
+        assert_eq!(compile_labels(&graph, "com/a"), vec!["com/b", "com/c/z"]);
+        assert_eq!(compile_labels(&graph, "com/b"), vec!["com/c/z"]);
+        let a = id_of(&graph, "com/a");
+        assert_eq!(labels_of(&graph, &graph.consumed_nodes[&a]), vec!["com/a/x", "com/a/y"]);
+    }
+
+    #[test]
+    fn test_three_node_cycle_across_dirs_uses_common_ancestor() {
+        let mut graph = GraphState::default();
+        let x = real(&mut graph, "com/a/x");
+        let y = real(&mut graph, "com/a/y");
+        let z = real(&mut graph, "com/b/z");
+        let w = real(&mut graph, "com/d/w");
+        graph.add_compile_edge(x, y);
+        graph.add_compile_edge(y, z);
+        graph.add_runtime_edge(z, x);
+        // Inbound edge from outside must be redirected to the merged node.
+        graph.add_compile_edge(w, x);
+
+        graph.collapse(&allow_all()).unwrap();
+
+        assert_eq!(live_labels(&graph), vec!["com", "com/d/w"]);
+        assert_eq!(compile_labels(&graph, "com/d/w"), vec!["com"]);
+        let com = id_of(&graph, "com");
+        assert_eq!(
+            graph.get_metadata(&com).map(|m| m.node_type),
+            Some(NodeType::Synthetic)
+        );
+        assert_eq!(
+            labels_of(&graph, &graph.consumed_nodes[&com]),
+            vec!["com/a/x", "com/a/y", "com/b/z"]
+        );
+    }
+
+    #[test]
+    fn test_collapse_sweeps_live_nodes_on_the_path_into_the_merged_node() {
+        let mut graph = GraphState::default();
+        let x1 = real(&mut graph, "com/a/x/1");
+        let y1 = real(&mut graph, "com/a/y/1");
+        // A live node that is a parent directory of a consumed node.
+        let x = real(&mut graph, "com/a/x");
+        let ext = real(&mut graph, "com/e/ext");
+        graph.add_compile_edge(x1, y1);
+        graph.add_compile_edge(y1, x1);
+        graph.add_compile_edge(x, ext);
+
+        graph.collapse(&allow_all()).unwrap();
+
+        assert_eq!(live_labels(&graph), vec!["com/a", "com/e/ext"]);
+        assert_eq!(compile_labels(&graph, "com/a"), vec!["com/e/ext"]);
+        let a = id_of(&graph, "com/a");
+        assert_eq!(
+            labels_of(&graph, &graph.consumed_nodes[&a]),
+            vec!["com/a/x", "com/a/x/1", "com/a/y/1"]
+        );
+    }
+
+    #[test]
+    fn test_merging_creates_a_new_cycle_that_is_collapsed_too() {
+        // x <-> y, and y -> z -> parent-dir node which depends back on x: after x,y are merged
+        // the merged node, z and the parent form a new cycle.
+        let mut graph = GraphState::default();
+        let x = real(&mut graph, "com/a/x");
+        let y = real(&mut graph, "com/a/y");
+        let z = real(&mut graph, "com/b/z");
+        graph.add_compile_edge(x, y);
+        graph.add_compile_edge(y, x);
+        graph.add_compile_edge(y, z);
+        graph.add_compile_edge(z, y);
+
+        graph.collapse(&allow_all()).unwrap();
+
+        assert_eq!(live_labels(&graph), vec!["com"]);
+        assert!(graph.compile_edges[&id_of(&graph, "com")].is_empty());
+    }
+
+    #[test]
+    fn test_self_edge_is_not_a_cycle() {
+        let mut graph = GraphState::default();
+        let a = real(&mut graph, "com/a");
+        let b = real(&mut graph, "com/b");
+        graph.add_compile_edge(a, a);
+        graph.add_compile_edge(a, b);
+
+        graph.collapse(&vec![]).unwrap();
+
+        assert_eq!(live_labels(&graph), vec!["com/a", "com/b"]);
+        assert!(graph.consumed_nodes.is_empty());
+    }
+
+    #[test]
+    fn test_cycle_outside_allow_list_is_an_error_listing_the_cycle() {
+        let mut graph = GraphState::default();
+        let a = real(&mut graph, "com/a/x");
+        let b = real(&mut graph, "com/a/y");
+        let c = real(&mut graph, "com/a/downstream");
+        graph.add_compile_edge(a, b);
+        graph.add_compile_edge(b, a);
+        graph.add_compile_edge(b, c);
+
+        let err = graph
+            .collapse(&vec!["com/other/".to_string()])
+            .expect_err("cycle is not allow-listed");
+        let msg = err.to_string();
+        assert!(msg.contains("com/a/x, com/a/y"), "{}", msg);
+        // Only the cycle is listed, not nodes merely reachable from it.
+        assert!(!msg.contains("downstream"), "{}", msg);
+    }
+
+    #[test]
+    fn test_cycle_partly_outside_allow_list_is_an_error() {
+        let mut graph = GraphState::default();
+        let a = real(&mut graph, "com/ok/x");
+        let b = real(&mut graph, "com/bad/y");
+        graph.add_compile_edge(a, b);
+        graph.add_compile_edge(b, a);
+
+        graph
+            .collapse(&vec!["com/ok/".to_string()])
+            .expect_err("com/bad/y is not allow-listed");
+    }
+
+    #[test]
+    fn test_no_common_prefix_is_an_error() {
+        let mut graph = GraphState::default();
+        let a = real(&mut graph, "left/x");
+        let b = real(&mut graph, "right/y");
+        graph.add_compile_edge(a, b);
+        graph.add_compile_edge(b, a);
+
+        let err = graph.collapse(&allow_all()).expect_err("no shared parent");
+        assert!(err.to_string().contains("cannot find a parent dir"));
+    }
+
+    #[test]
+    fn test_deep_acyclic_chain_is_left_alone() {
+        // Deep enough that a recursive traversal would overflow the stack.
+        const N: usize = 200_000;
+        let mut graph = GraphState::default();
+        let ids: Vec<usize> = (0..N).map(|i| real(&mut graph, &format!("com/p/n{}", i))).collect();
+        for w in ids.windows(2) {
+            graph.add_compile_edge(w[0], w[1]);
+        }
+
+        graph.collapse(&vec![]).unwrap();
+
+        assert_eq!(graph.node_count(), N);
+        assert!(graph.consumed_nodes.is_empty());
+    }
+
+    #[test]
+    fn test_large_ring_collapses_to_one_node() {
+        const N: usize = 5_000;
+        let mut graph = GraphState::default();
+        let ids: Vec<usize> = (0..N).map(|i| real(&mut graph, &format!("com/pkg/n{}", i))).collect();
+        for i in 0..N {
+            graph.add_compile_edge(ids[i], ids[(i + 1) % N]);
+        }
+
+        graph.collapse(&allow_all()).unwrap();
+
+        assert_eq!(live_labels(&graph), vec!["com/pkg"]);
+        let pkg = id_of(&graph, "com/pkg");
+        assert_eq!(graph.consumed_nodes[&pkg].len(), N);
+    }
+
+    #[test]
+    fn test_many_small_cycles_in_a_chain() {
+        // d_i/a <-> d_i/b, and each pair depends on the next pair.
+        const N: usize = 3_000;
+        let mut graph = GraphState::default();
+        for i in 0..N {
+            let a = real(&mut graph, &format!("com/d{}/a", i));
+            let b = real(&mut graph, &format!("com/d{}/b", i));
+            graph.add_compile_edge(a, b);
+            graph.add_compile_edge(b, a);
+            if i > 0 {
+                let prev = id_of(&graph, &format!("com/d{}/a", i - 1));
+                graph.add_compile_edge(prev, a);
+            }
+        }
+
+        graph.collapse(&allow_all()).unwrap();
+
+        assert_eq!(graph.node_count(), N);
+        assert_eq!(compile_labels(&graph, "com/d0"), vec!["com/d1"]);
+        assert!(compile_labels(&graph, &format!("com/d{}", N - 1)).is_empty());
+    }
+
+    // ---- differential tests against the original implementation ----
+
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    struct Spec {
+        labels: Vec<String>,
+        compile: Vec<(usize, usize)>,
+        runtime: Vec<(usize, usize)>,
+    }
+
+    fn random_spec(seed: u64, max_nodes: usize, label_pool: &[String]) -> Spec {
+        let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+        let mut pool: Vec<String> = label_pool.to_vec();
+        let n = 2 + rng.below(max_nodes.min(pool.len()) - 1);
+        let mut labels = Vec::new();
+        for _ in 0..n {
+            labels.push(pool.swap_remove(rng.below(pool.len())));
+        }
+        // Edge density varies per case so that we see everything from forests to dense SCCs.
+        let density = 1 + rng.below(4);
+        let mut compile = Vec::new();
+        let mut runtime = Vec::new();
+        for from in 0..n {
+            for to in 0..n {
+                if from != to && rng.below(n * 2) < density {
+                    if rng.below(5) == 0 {
+                        runtime.push((from, to));
+                    } else {
+                        compile.push((from, to));
+                    }
+                }
+            }
+        }
+        Spec { labels, compile, runtime }
+    }
+
+    fn build(spec: &Spec) -> GraphState {
+        let mut graph = GraphState::default();
+        for l in spec.labels.iter() {
+            real(&mut graph, l);
+        }
+        for (a, b) in spec.compile.iter() {
+            graph.add_compile_edge(*a, *b);
+        }
+        for (a, b) in spec.runtime.iter() {
+            graph.add_runtime_edge(*a, *b);
+        }
+        graph
+    }
+
+    /// `com`, `com/{a,b,c}`, `com/{a,b,c}/{x,y}`, and `com/{a,b,c}/{x,y}/{p,q}`: small enough
+    /// that labels collide as parent directories of one another, which exercises the
+    /// common ancestor logic and the sweeping of live nodes on the path to a merged node.
+    fn nested_label_pool() -> Vec<String> {
+        let mut v = vec!["com".to_string()];
+        for a in ["a", "b", "c"] {
+            v.push(format!("com/{}", a));
+            for x in ["x", "y"] {
+                v.push(format!("com/{}/{}", a, x));
+                for p in ["p", "q"] {
+                    v.push(format!("com/{}/{}/{}", a, x, p));
+                }
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn test_matches_reference_implementation_on_random_graphs() {
+        let pool = nested_label_pool();
+        let mut cyclic_cases = 0;
+        let mut reference_inconsistent = 0;
+        for seed in 0..3_000u64 {
+            let spec = random_spec(seed, 14, &pool);
+
+            let mut expected_graph = build(&spec);
+            let mut actual_graph = build(&spec);
+            let expected = expected_graph.ref_collapse(&allow_all());
+            let actual = actual_graph.collapse(&allow_all());
+
+            assert_eq!(
+                expected.is_ok(),
+                actual.is_ok(),
+                "seed {} disagreed on failure: expected {:?}, got {:?}",
+                seed,
+                expected.err(),
+                actual.err()
+            );
+            if expected.is_ok() {
+                assert!(is_consistent(&actual_graph), "seed {} is inconsistent", seed);
+                // The original can resurrect a node it already consumed (it iterates a stale
+                // snapshot in `common_ancestor`), leaving it both live and consumed. That is a
+                // bug rather than behaviour to preserve, so only compare sane results.
+                // It can also stop with a cycle left behind: its `no_loops` memo goes stale after
+                // merges create new cycles through nodes already checked.
+                if !is_consistent(&expected_graph) || !expected_graph.cyclic_sccs().is_empty() {
+                    reference_inconsistent += 1;
+                    continue;
+                }
+                assert_eq!(
+                    snapshot(&actual_graph),
+                    snapshot(&expected_graph),
+                    "seed {} produced a different graph",
+                    seed
+                );
+                if !expected_graph.consumed_nodes.is_empty() {
+                    cyclic_cases += 1;
+                }
+            }
+        }
+        // Make sure the generator is actually producing cycles to collapse.
+        assert!(cyclic_cases > 500, "only {} cyclic cases", cyclic_cases);
+        eprintln!(
+            "{} cyclic cases matched, {} skipped as the reference was inconsistent or cyclic",
+            cyclic_cases, reference_inconsistent
+        );
+    }
+
+    #[test]
+    fn test_collapse_is_deterministic() {
+        let pool = nested_label_pool();
+        for seed in 0..300u64 {
+            let spec = random_spec(seed, 14, &pool);
+            let mut first = build(&spec);
+            let mut second = build(&spec);
+            let r1 = first.collapse(&allow_all());
+            let r2 = second.collapse(&allow_all());
+            assert_eq!(r1.is_ok(), r2.is_ok());
+            if r1.is_ok() {
+                assert_eq!(snapshot(&first), snapshot(&second), "seed {}", seed);
+            }
+        }
+    }
+
+    #[test]
+    fn test_collapsed_graph_is_acyclic() {
+        let pool = nested_label_pool();
+        for seed in 0..1_000u64 {
+            let spec = random_spec(seed, 21, &pool);
+            let mut graph = build(&spec);
+            if graph.collapse(&allow_all()).is_ok() {
+                assert!(graph.cyclic_sccs().is_empty(), "seed {} left a cycle", seed);
+                assert!(is_consistent(&graph), "seed {} is inconsistent", seed);
+            }
+        }
     }
 }

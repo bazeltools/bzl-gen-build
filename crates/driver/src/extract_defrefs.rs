@@ -37,6 +37,12 @@ lazy_static::lazy_static! {
     static ref SCALA_EXTENSION: std::ffi::OsString = std::ffi::OsString::from("scala");
     static ref JAVA_EXTENSION: std::ffi::OsString = std::ffi::OsString::from("java");
     static ref PYTHON_EXTENSION: std::ffi::OsString = std::ffi::OsString::from("py");
+
+    /// Bounds concurrently running extractor subprocesses. Separate from the IO semaphore
+    /// (which is meant for file handles) so a cold cache can use every core.
+    static ref EXTRACTOR_PROCESSES: Semaphore = Semaphore::new(
+        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8)
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -70,8 +76,9 @@ async fn process_file(
     concurrent_io_operations: &'static Semaphore,
     opt: Arc<ExtractConfig>,
 ) -> Result<(ProcessedFile, Duration)> {
-    let _c = concurrent_io_operations.acquire().await?;
     let sha256 = {
+        // The IO permit is only held while reading the file, not while the extractor runs.
+        let io_permit = concurrent_io_operations.acquire().await?;
         let r = Sha256Value::from_path(path.as_path()).await.map_err(|e| {
             anyhow!(
                 "Unable to convert path to sha256 for path {:?} with error {:?}",
@@ -79,6 +86,7 @@ async fn process_file(
                 e
             )
         })?;
+        drop(io_permit);
         use std::os::unix::ffi::OsStrExt;
         // The input of the relative path is carried through into the output result
         // so we need to include this in our sha we use to identify the file.
@@ -106,6 +114,7 @@ async fn process_file(
         Ok((processed_file, st.elapsed()))
     } else {
         use tokio::process::Command;
+        let _process_permit = EXTRACTOR_PROCESSES.acquire().await?;
         let mut command = Command::new(opt.extractor.path.as_path());
         command
             .arg("--relative-input-paths")
